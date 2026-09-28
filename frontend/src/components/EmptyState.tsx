@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, BedDouble, Laptop, UtensilsCrossed } from "lucide-react";
+import { CrossGlyph, HomeGlyph, SparkleGlyph, SwirlGlyph } from "./Glyphs";
 import { MotifLine, SectionLabel } from "./ui";
 
 const EXAMPLES = [
@@ -28,9 +29,10 @@ const INTERRUPT_HINTS = [
 
 export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="mx-auto flex w-full max-w-[840px] flex-col px-5 pb-28 pt-[7vh] md:px-8 md:pb-24 md:pt-[11vh]">
+    <div className="relative mx-auto flex w-full max-w-[840px] flex-col px-5 pb-28 pt-[7vh] md:px-8 md:pb-24 md:pt-[11vh]">
       {/* opening statement — left-aligned, editorial */}
       <motion.div
+        className="relative"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
@@ -50,6 +52,20 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
           Interrupt an agent without throwing away valid work. The runtime preserves what still
           applies, fences results that can no longer commit, and rebuilds only what changed.
         </p>
+
+        {/* decorative mark cluster — desktop only, purely ornamental */}
+        <motion.div
+          aria-hidden="true"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+          className="pointer-events-none absolute right-0 top-0 hidden h-[190px] w-[240px] lg:block"
+        >
+          <SparkleGlyph className="absolute right-[176px] top-[6px] w-[22px] text-ink-3/55" />
+          <CrossGlyph className="absolute right-[6px] top-[26px] w-[140px] text-line" />
+          <SwirlGlyph strokeWidth={9} className="absolute right-[118px] top-[74px] w-[96px] text-line-2/70" />
+          <HomeGlyph className="absolute right-[30px] top-[112px] w-[54px] text-ink-3/45" />
+        </motion.div>
       </motion.div>
 
       {/* example prompts — refined list, not cards */}

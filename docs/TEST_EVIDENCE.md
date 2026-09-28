@@ -194,4 +194,30 @@ Bugs found and fixed during consolidation (all verified by re-test):
 - Full suite re-run after every backend change: 63 passed; `tsc --noEmit`
   clean; `vite build` clean; production served-mode (`GET /` → SPA) verified
   in a real browser with a full interrupt/recovery flow and zero console errors.
-- Mobile testing limited to CSS responsive design
+- Mobile testing limited to CSS responsive design and measurement (no
+  device/emulator in this environment): at ~500px, `scrollWidth == clientWidth`,
+  no element extends past the viewport, ornament cluster is `display: none`,
+  canvas matches the viewport.
+
+## Component integration pass (Framer bundle, 2026-09-28)
+
+Sources adapted: `Interaction_Lines_Background` (Karim Saif) + four vector
+glyphs (`Home`, `Shape 1` ×2, `Vector`). Adaptation rules and the decision not
+to take on the `framer` runtime are recorded in `docs/21ST_COMPONENT_INTEGRATION.md`
+§6. No new dependencies.
+
+Verified on this pass:
+- `tsc --noEmit` clean; `vite build` clean (463.89 kB single file); backend
+  `pytest`: 63 passed.
+- Canvas field live-probed in a real browser: two `getImageData` samples 260 ms
+  apart differ (idle orbit animating); canvas backing store DPR-capped
+  (1442×900 CSS → 1803×910 px at dpr 1.25); off-screen/hidden-tab/reduced-motion
+  paths pause or freeze the loop by construction.
+- Screens: empty state at 1440×900 (glyph cluster composed top-right, field
+  visible only in the margins), mid-run state at 1440×900 (impact card,
+  execution card, interrupt composer over the field — no line crosses text or
+  cards), header centre renders without a version separator when `state_version`
+  is 0 (regression fixed in this pass).
+- Layout measured at ~500px and at 1440px: no horizontal overflow at either;
+  cluster hidden below `lg`, shown at desktop; field layer is
+  `pointer-events-none` (clicks pass through).

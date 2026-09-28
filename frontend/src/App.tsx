@@ -5,6 +5,7 @@ import { Composer, type ComposerHandle } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { ExecutionSection } from "@/components/Execution";
 import { ImpactAnalysis } from "@/components/Impact";
+import { InteractionLines } from "@/components/InteractionLines";
 import { RuntimeInspector } from "@/components/Inspector";
 import {
   AssistantNote,
@@ -200,6 +201,7 @@ export default function App() {
 
         <div className="flex min-h-0 flex-1">
           <main className="workspace-bg relative flex min-w-0 flex-1 flex-col" aria-label="Workspace">
+            <InteractionLines className="lines-veil" />
             <NoticeStack notices={notices} onDismiss={(id) => setNotices((prev) => prev.filter((n) => n.id !== id))} />
 
             <div
@@ -209,7 +211,7 @@ export default function App() {
                 const el = e.currentTarget;
                 nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
               }}
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain"
             >
               {isEmpty ? (
                 <EmptyState onPick={(text) => void send(text)} />

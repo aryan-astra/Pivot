@@ -179,3 +179,14 @@ body {
     radial-gradient(900px 420px at 8% 108%, rgb(79 111 145 / 0.03), transparent 60%),
     var(--color-paper);
 }
+
+/* ambient line field: clears the reading column, strongest toward the edges */
+.lines-veil {
+  -webkit-mask-image: radial-gradient(
+    125% 100% at 50% 46%,
+    transparent 34%,
+    rgb(0 0 0 / 0.45) 66%,
+    #000 100%
+  );
+  mask-image: radial-gradient(125% 100% at 50% 46%, transparent 34%, rgb(0 0 0 / 0.45) 66%, #000 100%);
+}

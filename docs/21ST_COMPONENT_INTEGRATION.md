@@ -1,7 +1,8 @@
 # 21st.dev Component Integration Rules (PIVOT)
 
-Preparation note. No 21st.dev components have been provided yet — do not invent
-any. When component code, links, or snippets arrive, follow this process.
+Process for incoming component code (21st.dev, Framer Marketplace, or raw
+snippets) — do not invent components ourselves. Inspect, adapt, verify. Each
+arrival is recorded in the integration log at the bottom of this file.
 
 ## 1. Inspect before integrating
 
@@ -48,3 +49,51 @@ Avoid component spam. PIVOT stays visually coherent and intentional.
 (message → mid-run interrupt → recovery), console-error check, backend-log
 check, mobile viewport + keyboard + reduced-motion pass, production (`/`)
 served-mode check.
+
+## 6. Integration log
+
+### 2026-09-28 — Framer Marketplace decorative bundle (5 modules)
+
+Provided as `framer.com/m/*.js` asset URLs; each resolves to a
+`framerusercontent.com` module.
+
+| Module | What it is | Outcome |
+| --- | --- | --- |
+| `Interaction_Lines_Background` ("Reactive Lines" by Karim Saif) | Canvas line field that reacts to the pointer and orbits when idle | Ported → `frontend/src/components/InteractionLines.tsx` |
+| `Home` | House glyph (fill + heavy stroke + door) | Ported → `HomeGlyph` in `frontend/src/components/Glyphs.tsx` |
+| `Shape 1` (40×40) | Four-point sparkle | Ported → `SparkleGlyph` |
+| `Shape 1` (256×256) | Eight-arm starburst | Ported → `CrossGlyph` |
+| `Vector` | Looping swirl stroke | Ported → `SwirlGlyph` |
+
+Inspection: React + TypeScript, no state or data coupling. All five import the
+proprietary `framer` runtime (`addPropertyControls`, `withCSS`, `motion`,
+`useIsStaticRenderer`) for editor metadata only.
+
+Decision: **do not add the `framer` package.** Property controls, CSS-mask icon
+wrappers and static-renderer hooks are Framer-editor concerns; PIVOT gets none
+of them. Geometry is reused verbatim, the canvas algorithm is preserved, and
+colour comes from `currentColor` / PIVOT tokens. Zero new dependencies.
+
+Adaptations (section 3):
+- Line field is always transparent (the workspace paints `--color-paper`); the
+  original's painted vignette required an opaque background, so edge falloff is
+  a CSS mask instead (`.lines-veil` in `index.css`) — it clears the reading
+  column and keeps the strongest lines in the margins.
+- Container is `pointer-events-none`; pointer tracking listens on `window` and
+  maps into container space, so the field can never swallow clicks.
+- `prefers-reduced-motion` renders one static centred frame (no rAF loop);
+  the loop also pauses off-screen and on hidden tabs (`IntersectionObserver` +
+  `visibilitychange`), and DPR is capped at 2.
+- Mobile uses the orbiting mode (touch-follow would fight scrolling).
+- Defaults retuned for ink/paper: `rgba(29,29,27,0.16)` strokes, 6–26 lines
+  instead of up to 45.
+- Glyphs: `aria-hidden`, no interaction; used once as an ornament cluster in
+  the empty-state hero (`lg`+ only — hidden below so it never crowds content).
+
+Placement: line field as a `z-0` layer inside `<main>` (scroll surface is
+`relative z-10`); glyphs in `EmptyState` only, so they disappear once work
+starts.
+
+Also fixed while reviewing this pass: the header centre printed a dangling `/`
+separator when `state_version` was 0 — the version and its separator now render
+together, only above version 0.

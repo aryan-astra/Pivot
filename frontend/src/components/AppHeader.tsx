@@ -36,9 +36,11 @@ export function AppHeader({
       {/* contextual runtime state */}
       <div className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 font-mono text-[11px] text-ink-3 lg:flex" aria-hidden="true">
         {state.state_version > 0 && (
-          <span className="tnum text-ink-2">v{state.state_version}</span>
+          <>
+            <span className="tnum text-ink-2">v{state.state_version}</span>
+            <span className="text-line-2">/</span>
+          </>
         )}
-        <span className="text-line-2">/</span>
         <span className="max-w-[340px] truncate">{center}</span>
       </div>
 
