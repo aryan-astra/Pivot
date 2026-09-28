@@ -1,0 +1,33 @@
+# PIVOT root ignores (backend/frontend specifics live in their dirs)
+.venv/
+venv/
+node_modules/
+frontend/dist/
+frontend/.vite/
+.env
+.env.local
+.env.production
+!.env.example
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
+# Local-only files — never committed
+AGENTS.md
+docs/ORIGINAL_README.md
+Frontend-option1/
+Frontend-option2/
+workspace-*/
