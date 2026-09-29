@@ -1,4 +1,4 @@
-import { Globe2, LockKeyhole, Search, ShieldCheck } from "lucide-react";
+import { Activity, Globe2, LockKeyhole, Search, ShieldCheck } from "lucide-react";
 import type { Task } from "@/runtime/types";
 
 const SITES: Record<string, { name: string; domain: string }> = {
@@ -17,9 +17,53 @@ function siteForTask(task: Task) {
   return SITES[target] ?? { name: task.label.replace(/^Search\s+/i, "") || "Search", domain: "local.search" };
 }
 
-export function BrowserTaskPreview({ task, requestText }: { task: Task; requestText: string }) {
-  const site = siteForTask(task);
+/**
+ * Live preview beside the execution list. Search tasks get the inline site
+ * window; every other live task gets an honest activity card instead — never
+ * a fabricated site. Both variants disclose the local simulation.
+ */
+export function LiveTaskPreview({ task, requestText, siteWindow }: { task: Task; requestText: string; siteWindow: boolean }) {
   const progress = Math.max(0, Math.min(100, task.progress));
+  const active = task.status === "running";
+
+  if (!siteWindow) {
+    return (
+      <section
+        aria-label={`${task.label} live task preview`}
+        className="min-w-0 rounded-xl border border-line bg-surface p-2.5 shadow-lift sm:p-3"
+      >
+        <div className="mb-2 flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 text-accent">
+            <Activity size={14} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[11.5px] font-semibold text-ink">Live task</span>
+              <span className="shrink-0 rounded-full border border-fence/30 bg-fence/5 px-1.5 py-[1px] font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-fence">demo</span>
+            </div>
+            <p className="truncate font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">{active ? "Running" : "Queued"}</p>
+          </div>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+        </div>
+
+        <p className="truncate text-[12px] font-medium text-ink" title={task.label}>{task.label}</p>
+        <p className="tnum mt-0.5 truncate font-mono text-[9.5px] text-ink-3">{task.operation} · {task.task_id}</p>
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-line">
+            <span className="block h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="shrink-0 font-mono text-[8px] text-ink-3">{progress}%</span>
+        </div>
+
+        <p className="mt-2 flex items-start gap-1.5 text-[9px] leading-relaxed text-ink-3">
+          <ShieldCheck size={11} className="mt-px shrink-0 text-ok" aria-hidden="true" />
+          <span>This is a local simulation; no live site content is loaded.</span>
+        </p>
+      </section>
+    );
+  }
+
+  const site = siteForTask(task);
   const searching = task.status === "running";
   const query = requestText.trim() || task.label;
 
