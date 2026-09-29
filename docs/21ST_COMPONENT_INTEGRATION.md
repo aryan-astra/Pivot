@@ -29,7 +29,7 @@ These must keep working after any integration (re-verify each, in a real browser
 
 - Restyle to PIVOT tokens and restrained visual language (ink/paper, quiet borders, status colors only for state; no neon, no heavy gradients, no glow).
 - Follow existing conventions: `@/` imports, `cn()` for classes, `SectionLabel`/`Tag`/`StateChip`/`StatusGlyph` primitives in `components/ui.tsx`, `MotionConfig reducedMotion="user"`.
-- Match component boundaries (`Composer`, `Stream`, `Execution`, `Impact`, `Inspector`); don't smear responsibilities.
+- Match component boundaries (`PromptBar`, `Stream`, `Execution`, `Impact`, `Inspector`); don't smear responsibilities.
 - Keep the composer textarea at `16px` below the `md` breakpoint (prevents iOS focus zoom).
 
 ## 4. Selectivity

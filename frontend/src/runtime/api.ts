@@ -171,6 +171,9 @@ function normalizeTask(t: BackendTask, fallbackVersion: number): Task {
           ? result.summary
           : undefined,
     screenshot,
+    // Only the no-Playwright fallback marks results simulated; real browser
+    // runs stay undefined so the preview can promise an honest capture.
+    simulated: result.simulated === true || undefined,
     late: false,
   };
 }
@@ -254,13 +257,17 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
         const classification = String(p.classification ?? "modification");
         out.push(mk(`${ev.event_id}:msg`, "user.message", ev.timestamp, ev.state_version, { text, interruption: true }));
         const diff = diffByVersion.get(ev.state_version) ?? {};
+        // A no-change interruption (backchannel, or a correction whose parsed
+        // intent diffed to nothing) never emits INTENT_DIFF or bumps the
+        // version — render neither the annotation row nor a version advance.
+        const noop = classification === "backchannel" || Object.keys(diff).length === 0;
         out.push(
           mk(`${ev.event_id}:int`, "interruption.detected", ev.timestamp, ev.state_version, {
             text,
             changes: constraintChangesFromDiff(diff),
             from_version: ev.state_version,
-            to_version: ev.state_version + 1,
-            noop: classification === "backchannel",
+            to_version: noop ? ev.state_version : ev.state_version + 1,
+            noop,
           }),
         );
         break;
@@ -341,6 +348,15 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
           }),
         );
         break;
+      case "TASK_FAILED":
+        out.push(
+          mk(ev.event_id, "task.failed", ev.timestamp, ev.state_version, {
+            task_id: ev.task_id,
+            label: String(p.label ?? ev.task_id ?? ""),
+            error: String(p.error ?? "failed"),
+          }),
+        );
+        break;
       case "RECOVERY_COMPLETED": {
         const version = ev.state_version;
         const impact = impactFromAnalysis((p.impact ?? p) as Record<string, unknown>);
@@ -360,8 +376,8 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
       }
       default:
         // RUNTIME_STARTED/STOPPED, INTERRUPTION_CLASSIFIED, INTENT_DIFF,
-        // IMPACT_ANALYSIS, TASK_PROGRESS, CHECKPOINT_CREATED, RECOVERY_STARTED,
-        // TASK_FAILED: folded into the events above or not stream-relevant.
+        // IMPACT_ANALYSIS, TASK_PROGRESS, CHECKPOINT_CREATED, RECOVERY_STARTED:
+        // folded into the events above or not stream-relevant.
         break;
     }
   }
@@ -458,6 +474,26 @@ function constraintBits(c: Record<string, string | number>): string[] {
 }
 
 /**
+ * The query in a web-search request ("search for X" / "search the web for
+ * X" / "google X" / "look up X") — mirrors the backend parser so the
+ * acknowledgement and final answer name the search the live browser ran.
+ */
+function searchQueryOf(text: string): string | null {
+  const m = text
+    .trim()
+    .match(
+      /^(?:actually\s+|wait[,\s]+|so\s+)?(?:search(?:ing|ed)?(?:\s+the\s+web)?(?:\s+for)?|google|look(?:ing|ed)?\s+up)\s+(.+)$/i,
+    );
+  if (!m) return null;
+  const query = m[1]
+    .trim()
+    .replace(/\s+(?:instead|now|please|actually)$/i, "")
+    .replace(/[.?!,;:]+$/, "")
+    .trim();
+  return query || null;
+}
+
+/**
  * Acknowledge a run the way the embedded engine does. Built from per-version
  * evidence (the targeted URL, the request that created the version) so an
  * acknowledgement synthesized after an interruption never re-describes an
@@ -469,17 +505,26 @@ function ackLine(
   intent: RuntimeIntent | null,
   requestText: string,
 ): string {
+  const query = searchQueryOf(requestText);
+  if (query) {
+    return `Searching the web for “${excerpt(query, 90)}” — opening the results in a local browser, then I'll capture the page and read back what I find. Interrupt me mid-run and I'll re-target.`;
+  }
   if (target) {
     return `Opening ${target.host} in a local browser — I'll capture the page, read what's on it, and pin the screenshot. Interrupt me mid-run and I'll re-target.`;
   }
   if (isCurrent && intent) {
-    if (intent.domain === "generic" && !intent.targets.length) {
+    if ((intent.domain === "generic" || intent.domain === "general") && !intent.targets.length) {
       return "On it — working through your request, one step at a time. Interrupt any time; whatever stays valid is kept.";
     }
     const bits = constraintBits(intent.constraints);
-    const noun = intent.domain === "dining" ? "restaurants" : intent.domain === "travel" ? "stays" : "options";
-    const what = bits.length ? bits.join(", ") : "your criteria";
-    return `Understood — searching ${intent.targets.join(" and ") || "the local runtime"} for ${noun} ${what}. Interrupt any time; whatever stays valid is kept.`;
+    const noun = intent.domain === "dining" || intent.domain === "food"
+      ? "restaurants"
+      : intent.domain === "travel"
+        ? "stays"
+        : "options";
+    const where = intent.targets.join(" and ") || "the local runtime";
+    const what = bits.length ? bits.join(", ") : "matching your criteria";
+    return `Understood — searching ${where} for ${noun} ${what}. Interrupt any time; whatever stays valid is kept.`;
   }
   if (requestText) {
     return `On it — "${excerpt(requestText, 110)}". Working through it now; interrupt any time — whatever stays valid is kept.`;
@@ -493,9 +538,11 @@ function answerLine(
   rawById: Map<string, BackendTask>,
   intent: RuntimeIntent | null,
   isCurrent: boolean,
+  requestText = "",
 ): string {
   const preserved = list.filter((t) => t.status === "preserved").length;
   const fenced = list.filter((t) => t.status === "fenced").length;
+  const cancelled = list.filter((t) => t.status === "cancelled").length;
   const parts: string[] = [];
 
   if (isBrowseList(list)) {
@@ -510,24 +557,48 @@ function answerLine(
       (isCurrent ? String(intent?.targets[0] ?? intent?.constraints.url ?? "the page") : "the page");
     const title = last.title || (last.summary ? last.summary.split(" — ")[0] : "");
     const shot = results.some((r) => Boolean(r.screenshot));
-    parts.push(title ? `Done — I opened ${host} and the page reads “${excerpt(title, 90)}”.` : `Done — I opened ${host}.`);
+    const query = searchQueryOf(requestText);
     const body = last.text || "";
-    if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+    const completedBrowse = list.filter((t) => t.status === "completed").length;
+    if (completedBrowse === 0 && cancelled > 0) {
+      parts.push(
+        `Stopped — ${cancelled} step${cancelled === 1 ? "" : "s"} cancelled on your request; nothing was captured.`,
+      );
+    } else if (query) {
+      parts.push(`Done — I searched the web for “${excerpt(query, 90)}”.`);
+      if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+      else if (title) parts.push(`The results page reads “${excerpt(title, 90)}”.`);
+    } else {
+      parts.push(title ? `Done — I opened ${host} and the page reads “${excerpt(title, 90)}”.` : `Done — I opened ${host}.`);
+      if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+    }
     if (shot) parts.push("The final capture stays visible in the floating preview.");
     if (!body && !shot && results.some((r) => r.simulated)) {
       parts.push("This run was simulated locally — no live page was loaded.");
     }
     const err = results.map((r) => r.error).find(Boolean);
     if (err && !body) parts.push(`The browser reported: ${excerpt(String(err), 140)}`);
+    if (cancelled > 0 && completedBrowse > 0) {
+      parts.push(`${cancelled} step${cancelled === 1 ? "" : "s"} cancelled on your request.`);
+    }
   } else {
     const finished = list.filter((t) => t.status === "completed" || t.status === "preserved");
     const labels = finished.map((t) => t.label).slice(0, 4);
-    parts.push(
-      `Done — ${finished.length} step${finished.length === 1 ? "" : "s"} finished${labels.length ? `: ${labels.join(" · ")}` : ""}.`,
-    );
-    const completed = list.filter((t) => t.status === "completed");
-    if (completed.length > 0 && completed.every((t) => resultOf(rawById.get(t.task_id)).simulated)) {
-      parts.push("This run was executed by the local simulation — no live results were fetched.");
+    if (finished.length === 0 && cancelled > 0) {
+      parts.push(
+        `Stopped — ${cancelled} step${cancelled === 1 ? "" : "s"} cancelled on your request.`,
+      );
+    } else {
+      parts.push(
+        `Done — ${finished.length} step${finished.length === 1 ? "" : "s"} finished${labels.length ? `: ${labels.join(" · ")}` : ""}.`,
+      );
+      const completed = list.filter((t) => t.status === "completed");
+      if (completed.length > 0 && completed.every((t) => resultOf(rawById.get(t.task_id)).simulated)) {
+        parts.push("This run was executed by the local simulation — no live results were fetched.");
+      }
+      if (cancelled > 0) {
+        parts.push(`${cancelled} step${cancelled === 1 ? "" : "s"} cancelled on your request.`);
+      }
     }
   }
 
@@ -570,8 +641,13 @@ function buildApiResults(
     const host = target?.host ?? (isCurrent ? String(intent?.targets[0] ?? intent?.constraints.url ?? "the page") : "the page");
     const pageUrl = target?.url ?? String(content.url ?? (isCurrent ? intent?.constraints.url ?? "" : ""));
     const shot = results.some((r) => Boolean(r.screenshot));
+    const query = searchQueryOf(requestText);
     return {
-      heading: content.title ? `${host} — ${excerpt(content.title, 80)}` : `Opened ${host}`,
+      heading: query
+        ? `Search “${excerpt(query, 70)}” — ${host}`
+        : content.title
+          ? `${host} — ${excerpt(content.title, 80)}`
+          : `Opened ${host}`,
       note: shot
         ? `Final capture floating in the preview · ${list.length} steps · state v${version}`
         : `State v${version} · ${list.length} steps`,
@@ -687,7 +763,7 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
     );
     events.push(
       mk(`syn-close-${runId}-v${v}`, "assistant.message", closedAt + 0.001, v, {
-        text: answerLine(list, rawTaskById, intent, v === version),
+        text: answerLine(list, rawTaskById, intent, v === version, requests.get(v) ?? ""),
         closing: true,
       }),
     );

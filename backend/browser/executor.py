@@ -26,6 +26,7 @@ NAV_TIMEOUT_MS = 12_000
 ACTION_TIMEOUT_MS = 5_000
 SHOT_TIMEOUT_MS = 5_000
 EXTRACT_TIMEOUT_MS = 8_000
+SETTLE_TIMEOUT_MS = 5_000
 VIEWPORT = {"width": 1280, "height": 800}
 
 
@@ -35,6 +36,33 @@ def is_url_allowed(url: str) -> bool:
         return urlsplit(url.strip()).scheme.lower() in ("http", "https", "data")
     except Exception:
         return False
+
+
+# Leading page boilerplate: standard skip links, ALL-CAPS nav label rows
+# (e.g. Bing's "ALLSEARCHIMAGES…MORE" bar), and common chrome words.
+_CHROME_LINES = frozenset(
+    {"skip to content", "accessibility feedback", "rewards", "more", "privacy", "terms", "sign in", "menu"}
+)
+
+
+def content_text(body: str, limit: int = 2000) -> str:
+    """Page text trimmed of leading boilerplate so answers quote content.
+
+    Screenshots stay raw pixels; this only affects the text summary that the
+    UI reads back ("What I see: …"), which otherwise opens with skip links.
+    """
+    lines = [ln.strip() for ln in body.splitlines()]
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line:
+            i += 1
+            continue
+        nav_label = 2 <= len(line) <= 40 and line.isupper()
+        if line.lower() not in _CHROME_LINES and not nav_label:
+            break
+        i += 1
+    return " ".join(ln for ln in lines[i:] if ln)[:limit]
 
 
 @dataclass
@@ -149,8 +177,6 @@ class BrowserExecutor:
 
         if self._page:
             try:
-                from playwright.async_api import Error as PWError
-
                 self._console_errors = []
                 await self._page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                 screenshot = await self._take_screenshot()
@@ -288,10 +314,6 @@ class BrowserExecutor:
             for a in actions
         ]
 
-    @property
-    def is_available(self) -> bool:
-        return self._browser is not None or True  # Simulated mode always available
-
 
 class BrowserSession:
     """Managed browser lifetime: one shared browser, one context per task.
@@ -337,8 +359,6 @@ class BrowserSession:
         converted) so scheduler cancellation ends the task as CANCELLED.
         The task context is always closed via a shielded cleanup.
         """
-        from playwright.async_api import Error as PWError
-
         started = await self.ensure_started()
         if not started or self._browser is None:
             return {"status": "simulated", "url": url, "simulated": True}
@@ -363,10 +383,12 @@ class BrowserSession:
                 pass
 
             await page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
-            # Let full load settle briefly so captures show rendered content
-            # (best effort — never fails the task on slow pages).
+            # domcontentloaded precedes rendering on JS-heavy pages (search
+            # results hydrate after load) — wait for the network to go quiet
+            # so the capture shows the real page, not its shell. Best effort:
+            # capped, never fails the task on slow/long-polling pages.
             try:
-                await page.wait_for_load_state("load", timeout=3_000)
+                await page.wait_for_load_state("networkidle", timeout=SETTLE_TIMEOUT_MS)
             except Exception:
                 pass
             title = await page.title()
@@ -389,7 +411,7 @@ class BrowserSession:
             if extract_text:
                 try:
                     body = await page.locator("body").inner_text(timeout=ACTION_TIMEOUT_MS)
-                    out["text"] = body.strip()[:2000]
+                    out["text"] = content_text(body)
                 except Exception:
                     pass
             return out

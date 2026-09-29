@@ -547,6 +547,9 @@ class InterruptEngine {
       created_in: this.version,
       depends_on: dependsOn,
       progress: 0,
+      // The embedded engine never opens a browser — every task is simulated,
+      // which is what keeps the preview honest (demo badge, simulation copy).
+      simulated: true,
       late,
     };
     this.tasks.push(task);

@@ -24,8 +24,10 @@ export interface Task {
   depends_on: string | null;
   progress: number;
   output?: string;
-  /** live capture from the running browser (data URI); absent = simulated */
+  /** live capture from the running browser (data URI); absent until a page renders */
   screenshot?: string;
+  /** ran in simulation (embedded engine or no-Playwright fallback) — no real browser */
+  simulated?: boolean;
   /** created by a re-plan after an interruption */
   late?: boolean;
 }
@@ -46,6 +48,7 @@ export type RuntimeEventType =
   | "task.progress"
   | "task.completed"
   | "task.cancelled"
+  | "task.failed"
   | "task.invalidated"
   | "task.fenced"
   | "task.preserved"

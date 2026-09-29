@@ -212,6 +212,41 @@ class DeterministicIntentParser:
             host = host[4:]
         return host
 
+    # Web-search phrasing: "search for X" / "search the web for X" /
+    # "google X" / "look up X" — optionally led by an interrupt filler
+    # ("actually search for X instead"). Such requests run against a real
+    # search engine in the live browser so the capture, extract, and
+    # floating preview visibly ARE the search (not a simulated request).
+    SEARCH_RE = re.compile(
+        r"^(?:actually\s+|wait[,\s]+|so\s+)?"
+        r"(?:search(?:ing|ed)?(?:\s+the\s+web)?(?:\s+for)?|google|look(?:ing|ed)?\s+up)\s+(.+)$",
+        re.IGNORECASE,
+    )
+    SEARCH_TAIL_RE = re.compile(r"\s+(?:instead|now|please|actually)$", re.IGNORECASE)
+
+    @staticmethod
+    def extract_search_query(text: str) -> Optional[str]:
+        """The query in a web-search request; None for anything else."""
+        m = DeterministicIntentParser.SEARCH_RE.match(text.strip())
+        if not m:
+            return None
+        query = DeterministicIntentParser.SEARCH_TAIL_RE.sub("", m.group(1).strip()).strip()
+        query = query.rstrip("?.!,;:")
+        return query or None
+
+    @staticmethod
+    def search_url(query: str) -> str:
+        """Search-engine results URL for a query (Bing renders cleanly in
+        Chromium: no consent wall, no captcha, server-rendered results).
+
+        The market/language params pin results to the English US market: a
+        bare headless context gets geolocated to a random market and Bing
+        serves unrelated junk pages instead of the real SERP (verified
+        side-by-side: plain → junk, pinned → "42,900 results")."""
+        from urllib.parse import quote_plus
+
+        return f"https://www.bing.com/search?q={quote_plus(query)}&setmkt=en-US&setlang=en&cc=US"
+
     # Parameter extraction patterns
     RAM_PATTERNS = [
         r"(\d+)\s*gb\s*(?:ram|memory)",
@@ -271,6 +306,21 @@ class DeterministicIntentParser:
             new_intent.constraints["url"] = url
             new_intent.domain = "browse"
             new_intent.targets = [self.url_host(url)]
+            return new_intent
+
+        # Web-search re-target ("actually search for X instead") — points
+        # the live browser at the search engine instead. Also taken when the
+        # query repeats the current one: returning identical fields here
+        # skips unrelated constraint extraction (e.g. "for <word>" reading as
+        # a location), so a repeated search lands as a clean no-op.
+        query = self.extract_search_query(transcript)
+        if query is not None:
+            search_url = self.search_url(query)
+            new_intent.constraints["url"] = search_url
+            new_intent.constraints["query"] = query
+            new_intent.domain = "browse"
+            new_intent.objective = "search"
+            new_intent.targets = [self.url_host(search_url)]
             return new_intent
 
         # Extract RAM changes
@@ -342,6 +392,18 @@ class DeterministicIntentParser:
             intent.objective = "browse"
             intent.constraints["url"] = url
             intent.targets = [self.url_host(url)]
+            return intent
+
+        # Web-search: open a real search engine in the live browser so the
+        # run (capture, extract, preview) visibly IS the search.
+        query = self.extract_search_query(text)
+        if query is not None:
+            search_url = self.search_url(query)
+            intent.domain = "browse"
+            intent.objective = "search"
+            intent.constraints["url"] = search_url
+            intent.constraints["query"] = query
+            intent.targets = [self.url_host(search_url)]
             return intent
 
         # Detect domain
