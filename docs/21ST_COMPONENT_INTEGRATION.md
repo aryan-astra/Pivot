@@ -128,7 +128,8 @@ runtime. Animation respects reduced-motion preferences; tool and runtime status
 remain driven by the backend/embedded runtime, not component-local mock state.
 `VoicePill` uses speech recognition only after a microphone action and surfaces
 browser-permission/service failures; the composer discloses that the browser
-speech service processes dictation. The site window appears inline beside an
-active search task—there is no global browser-preview control or blocking modal.
+speech service processes dictation. The site window appears in the floating
+preview window that follows an active search task—there is no global
+browser-preview control or blocking modal.
 It is explicitly labelled as a local simulation and makes no outbound browsing
 requests; live site content requires a connected browser adapter.

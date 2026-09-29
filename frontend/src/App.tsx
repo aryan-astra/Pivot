@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import PromptBar from "@/components/PromptBar";
 import VoicePill from "@/components/VoicePill";
 import { ExecutionSection } from "@/components/Execution";
+import { FloatingPreview } from "@/components/FloatingPreview";
 import { ImpactAnalysis } from "@/components/Impact";
 import { InteractionLines } from "@/components/InteractionLines";
 import { RuntimeInspector } from "@/components/Inspector";
@@ -330,7 +331,6 @@ export default function App() {
                               currentVersion={state.state_version}
                               swept={sweptVersions.has(item.version)}
                               strandColors={strandColors}
-                              requestText={requestTextByVersion.get(item.version) ?? ""}
                             />
                           );
                         default:
@@ -391,6 +391,15 @@ export default function App() {
                 </div>
               </div>
             </main>
+
+            {/* Browser preview as a floating window: survives step turnover,
+                never reflows the stream, draggable by its header, minimizable. */}
+            <FloatingPreview
+              tasks={state.tasks}
+              phase={state.phase}
+              version={state.state_version}
+              requestText={requestTextByVersion.get(state.state_version) ?? ""}
+            />
 
             {isDesktop ? (
               <RuntimeInspector state={state} open={devMode} onClose={() => setDevMode(false)} variant="inline" demoMode={demoMode} onDemoChange={setDemoMode} />

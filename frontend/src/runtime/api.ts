@@ -513,7 +513,7 @@ function answerLine(
     parts.push(title ? `Done — I opened ${host} and the page reads “${excerpt(title, 90)}”.` : `Done — I opened ${host}.`);
     const body = last.text || "";
     if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
-    if (shot) parts.push("The final capture is pinned beside the plan.");
+    if (shot) parts.push("The final capture stays visible in the floating preview.");
     if (!body && !shot && results.some((r) => r.simulated)) {
       parts.push("This run was simulated locally — no live page was loaded.");
     }
@@ -573,7 +573,7 @@ function buildApiResults(
     return {
       heading: content.title ? `${host} — ${excerpt(content.title, 80)}` : `Opened ${host}`,
       note: shot
-        ? `Final capture pinned in the preview · ${list.length} steps · state v${version}`
+        ? `Final capture floating in the preview · ${list.length} steps · state v${version}`
         : `State v${version} · ${list.length} steps`,
       items,
       meta: `${pageUrl || host} · state v${version} applied`,

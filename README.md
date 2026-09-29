@@ -80,10 +80,12 @@ The workspace renders the run as a stream: user request → execution plan
 states) → interruption notice → impact analysis (preserved / invalidated /
 fenced counts plus the constraint change) → recovery note → settled summary.
 
-- During an active search task, a small inline site preview appears
-  automatically beside the execution card. It is labelled as a local
-  simulation — no live site content is loaded and there is no preview
-  button, modal, or other permanent control.
+- The browser preview floats picture-in-picture near the bottom-left
+  corner: it appears automatically during an active search task (no
+  preview button, modal, or other permanent control), stays on screen
+  while steps execute, and can be dragged by its header to any corner or
+  minimized to a header pill. Search tasks are labelled as a local
+  simulation - no live site content is loaded.
 - **Dev Mode** (header toggle) opens the runtime inspector: state matrix,
   constraints, interruption readiness, last impact, execution graph, and a
   scrollable event timeline.
@@ -96,8 +98,9 @@ fenced counts plus the constraint change) → recovery note → settled summary.
 - Example prompts and the offline fallback's scripted sample results sit
   behind a Demo toggle in Dev Mode (off by default, remembered per browser).
 - Browse requests (`go to <url>`) drive a real local Chromium (Playwright):
-  open → capture → read, with live page captures in the preview and titles +
-  text in the finished task cards. No domain allowlist (http/https only).
+  open → capture → read, shown in a floating, draggable preview window that
+  stays on screen across steps, with titles + text in the finished task
+  cards. No domain allowlist (http/https only).
 - Component roles: CallChip = tool commands, Strands = working state,
   ClickSpark = click feedback, SpringCheck = to-dos, VoicePill = audio
   prompts, ThoughtLine = agent working/settled status, StatusMark = task
