@@ -6,7 +6,7 @@ import SpringCheck from "./SpringCheck";
 import StatusMark from "./StatusMark";
 import ThoughtLine from "./ThoughtLine";
 import Strands from "./Strands";
-import { BrowserTaskPreview } from "./BrowserTaskPreview";
+import { LiveTaskPreview } from "./LiveTaskPreview";
 import { SectionLabel, StateChip, STATUS_META, Tag } from "./ui";
 
 function toolStatus(task: Task): "idle" | "running" | "done" | "error" {
@@ -152,9 +152,14 @@ export function ExecutionSection({
   const isLive = version === currentVersion && (phase === "running" || phase === "planning" || phase === "interrupting");
   const paused = isLive && phase === "interrupting";
   const activeTasks = tasks.filter((task) => task.status === "running").map((task) => task.label);
-  const browserTask = isLive
+  // Live preview follows whatever is actually running: a search task keeps
+  // the site window, any other task gets the honest activity card. This is
+  // why non-search requests (e.g. a generic "go to …") still show a preview.
+  const previewTask = isLive
     ? tasks.find((task) => isBrowserSearchTask(task) && task.status === "running")
+      ?? tasks.find((task) => task.status === "running")
       ?? tasks.find((task) => isBrowserSearchTask(task) && task.status === "pending")
+      ?? tasks.find((task) => task.status === "pending")
     : undefined;
 
   if (tasks.length === 0) return null;
@@ -208,14 +213,14 @@ export function ExecutionSection({
         />
       </div>
 
-      <div className={cn("mt-2.5 grid items-start gap-3", browserTask && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
+      <div className={cn("mt-2.5 grid items-start gap-3", previewTask && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
         <div className="relative min-w-0 overflow-hidden rounded-xl border border-line bg-surface">
           {swept && <span className="sweep-line z-10" aria-hidden="true" />}
           <ul className="divide-y divide-line/80 px-1.5 py-1 sm:px-2">
             {tasks.map((task, index) => <ExecutionTask key={task.task_id} task={task} index={index} isLast={index === tasks.length - 1} />)}
           </ul>
         </div>
-        {browserTask ? <BrowserTaskPreview task={browserTask} requestText={requestText} /> : null}
+        {previewTask ? <LiveTaskPreview task={previewTask} requestText={requestText} siteWindow={isBrowserSearchTask(previewTask)} /> : null}
       </div>
     </section>
   );

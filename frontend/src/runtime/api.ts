@@ -391,6 +391,10 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
   // Synthesize a stable closing line for each fully settled version from real
   // task state (never fabricated result items). Keep the synthetic event id and
   // timestamp stable across polls so the UI's append-only stream never rewinds.
+  // The id is scoped by run_id: versions restart at v1 after /api/reset, so a
+  // bare `syn-close-v1` would collide with the previous run's tail and defeat
+  // the stream's reset detection in App (frozen pre-reset items).
+  const runId = raw.run_id ?? "run";
   const running = raw.running_tasks ?? tasks.filter((t) => t.status === "running").length;
   const hasPending = tasks.some((task) => task.status === "pending");
   const rawTaskById = new Map([...live, ...archived].map((task) => [task.task_id, task]));
@@ -421,7 +425,7 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
       }),
     );
     events.push(
-      mk(`syn-close-v${v}`, "assistant.message", closedAt + 0.001, v, { text: closingLine(steps, preserved), closing: true }),
+      mk(`syn-close-${runId}-v${v}`, "assistant.message", closedAt + 0.001, v, { text: closingLine(steps, preserved), closing: true }),
     );
   }
   events.sort((a, b) => a.timestamp - b.timestamp);
