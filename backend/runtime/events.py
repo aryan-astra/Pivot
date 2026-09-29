@@ -46,6 +46,7 @@ class EventBus:
         self._history: list[RuntimeEvent] = []
         self._max_history = max_history
         self._lock = asyncio.Lock()
+        self._pending_publishes: set[asyncio.Task[None]] = set()
 
     def subscribe(self, event_type: str, callback: Callable) -> Callable:
         self._subscribers[event_type].append(callback)
@@ -82,6 +83,11 @@ class EventBus:
                 )
                 self._history.append(error_event)
 
+    async def drain(self) -> None:
+        """Wait until all fire-and-forget event deliveries have settled."""
+        while self._pending_publishes:
+            await asyncio.gather(*tuple(self._pending_publishes), return_exceptions=True)
+
     def emit(self, event_type: str, run_id: str = "", state_version: int = 0,
              task_id: Optional[str] = None, correlation_id: Optional[str] = None,
              payload: Optional[dict[str, Any]] = None) -> RuntimeEvent:
@@ -93,7 +99,20 @@ class EventBus:
             correlation_id=correlation_id,
             payload=payload or {},
         )
-        asyncio.ensure_future(self.publish(event))
+        task = asyncio.get_running_loop().create_task(self.publish(event))
+        self._pending_publishes.add(task)
+
+        def finished(completed: asyncio.Task[None]) -> None:
+            self._pending_publishes.discard(completed)
+            if not completed.cancelled():
+                error = completed.exception()
+                if error is not None:
+                    # Retrieving the exception prevents an unhandled-task warning;
+                    # normal subscriber failures are converted to ERROR events in publish().
+                    import logging
+                    logging.getLogger(__name__).error("Event publication failed", exc_info=error)
+
+        task.add_done_callback(finished)
         return event
 
     def get_history(self, event_type: Optional[str] = None,

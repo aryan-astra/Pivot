@@ -50,7 +50,7 @@ export type InteractionLinesProps = {
 
 export function InteractionLines({
   className,
-  lineColor = "rgba(29, 29, 27, 0.16)",
+  lineColor,
   lineWidth = 1,
   opacity = 1,
   minLines = 6,
@@ -84,6 +84,8 @@ export function InteractionLines({
     let pageVisible = document.visibilityState === "visible";
     let linesNum = (minLines + maxLines) / 2;
     let bias = 0.5;
+    const resolveLineColor = () => lineColor ?? (getComputedStyle(container).getPropertyValue("--line-canvas").trim() || "rgba(29, 29, 27, 0.16)");
+    let activeLineColor = resolveLineColor();
 
     const setup = () => {
       const w = container.clientWidth;
@@ -169,7 +171,7 @@ export function InteractionLines({
       linesNum = lerp(linesNum, clamp(mapRange(p.y, 0, n, lo, hi), lo, hi), 0.1);
       bias = lerp(bias, clamp(mapRange(p.x, 0, r, 0.6, 0.4), 0.4, 0.6), 0.05);
 
-      ctx.strokeStyle = lineColor;
+      ctx.strokeStyle = activeLineColor;
       ctx.lineWidth = lineWidth;
       const segments = Math.max(10, quality);
       const total = Math.round(linesNum);
@@ -233,6 +235,13 @@ export function InteractionLines({
       },
       { threshold: 0 },
     );
+    const themeObserver = lineColor
+      ? null
+      : new MutationObserver(() => {
+          activeLineColor = resolveLineColor();
+          if (reducedMq.matches) draw(0);
+        });
+    themeObserver?.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const onVisibility = () => {
       pageVisible = document.visibilityState === "visible";
       pageVisible && inView ? start() : stop();
@@ -253,6 +262,7 @@ export function InteractionLines({
       stop();
       resizeObserver.disconnect();
       viewObserver.disconnect();
+      themeObserver?.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
       reducedMq.removeEventListener("change", onMotionChange);
     };

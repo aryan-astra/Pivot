@@ -195,9 +195,10 @@ Bugs found and fixed during consolidation (all verified by re-test):
   clean; `vite build` clean; production served-mode (`GET /` → SPA) verified
   in a real browser with a full interrupt/recovery flow and zero console errors.
 - Mobile testing limited to CSS responsive design and measurement (no
-  device/emulator in this environment): at ~500px, `scrollWidth == clientWidth`,
-  no element extends past the viewport, ornament cluster is `display: none`,
-  canvas matches the viewport.
+  device/emulator in this environment): at 390px, `scrollWidth == clientWidth`,
+  the theme dialog stays inside the viewport, and the canvas matches the workspace.
+  With `prefers-reduced-motion: reduce`, two canvas samples 500ms apart are
+  identical; the motion preference also reaches Framer Motion via `MotionConfig`.
 
 ## Component integration pass (Framer bundle, 2026-09-28)
 
@@ -207,17 +208,22 @@ to take on the `framer` runtime are recorded in `docs/21ST_COMPONENT_INTEGRATION
 §6. No new dependencies.
 
 Verified on this pass:
-- `tsc --noEmit` clean; `vite build` clean (463.89 kB single file); backend
-  `pytest`: 63 passed.
-- Canvas field live-probed in a real browser: two `getImageData` samples 260 ms
-  apart differ (idle orbit animating); canvas backing store DPR-capped
-  (1442×900 CSS → 1803×910 px at dpr 1.25); off-screen/hidden-tab/reduced-motion
-  paths pause or freeze the loop by construction.
-- Screens: empty state at 1440×900 (glyph cluster composed top-right, field
-  visible only in the margins), mid-run state at 1440×900 (impact card,
-  execution card, interrupt composer over the field — no line crosses text or
-  cards), header centre renders without a version separator when `state_version`
-  is 0 (regression fixed in this pass).
-- Layout measured at ~500px and at 1440px: no horizontal overflow at either;
-  cluster hidden below `lg`, shown at desktop; field layer is
-  `pointer-events-none` (clicks pass through).
+- `npm run typecheck` clean; production `vite build` clean (1,196.42 kB
+  single-file HTML, 616.06 kB gzip); `npm audit` reports 0 vulnerabilities;
+  backend `pytest`: 63 passed.
+- Production-served browser check: `GET /` returns 200 and `/api/health` is
+  healthy. In the 1440×840 Ink canvas probe, 36,333 white stroke pixels render
+  beneath the soft central mask; the theme is `#27313b` charcoal, and the former
+  `obsidian` preference migrates to `ink`.
+- Animation check: the idle canvas fingerprint changed between 420ms samples;
+  with reduced motion enabled, two samples 500ms apart were identical. At 390px,
+  there is no horizontal overflow.
+- Production integration flow: automatic inline Site preview appeared during
+  a laptop search with local-simulation disclosure and no permanent preview
+  button; interrupting with “Actually make that 16 GB RAM” reached state v2
+  with RAM `16GB`. Recovery and interruption glyphs appeared beside their
+  matching stream events. No external requests, console errors, or 5xx responses.
+- Dev Mode Event timeline: scroll container measured 788px high with 3,452px
+  of history; it scrolled to `scrollTop: 2,664`.
+- Layout at 390px and 1440px: no horizontal overflow; semantic glyphs stay with
+  their labels; the field is `pointer-events-none` so clicks pass through.

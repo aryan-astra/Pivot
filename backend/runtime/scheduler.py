@@ -125,15 +125,21 @@ class TaskScheduler:
             cancel_event.set()
 
         task = self._running_tasks.get(task_id)
-        if task and not task.done():
-            task.cancel()
-            self._event_bus.emit(
-                "TASK_CANCEL_REQUESTED",
-                task_id=task_id,
-                payload={"reason": reason},
-            )
-            return True
-        return False
+        if not task or task.done():
+            return False
+
+        task.cancel()
+        self._event_bus.emit(
+            "TASK_CANCEL_REQUESTED",
+            task_id=task_id,
+            payload={"reason": reason},
+        )
+        # Cancellation is not complete until the coroutine's finally block has
+        # released its slot and emitted TASK_CANCELLED. Awaiting here prevents
+        # shutdown/reset from closing persistence while a worker is still unwinding.
+        await asyncio.gather(task, return_exceptions=True)
+        await self._event_bus.drain()
+        return True
 
     async def cancel_tasks(self, task_ids: list[str], reason: str = "") -> dict[str, bool]:
         results = {}
@@ -146,6 +152,8 @@ class TaskScheduler:
         for task_id in list(self._running_tasks.keys()):
             if await self.cancel_task(task_id, reason):
                 cancelled += 1
+        await self.wait_all()
+        await self._event_bus.drain()
         return cancelled
 
     def is_running(self, task_id: str) -> bool:

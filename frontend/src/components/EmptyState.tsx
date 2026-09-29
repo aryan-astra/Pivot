@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, BedDouble, Laptop, UtensilsCrossed } from "lucide-react";
-import { CrossGlyph, HomeGlyph, SparkleGlyph, SwirlGlyph } from "./Glyphs";
+import { CrossGlyph, HomeGlyph, SparkleGlyph } from "./Glyphs";
 import { MotifLine, SectionLabel } from "./ui";
 
 const EXAMPLES = [
@@ -37,35 +37,22 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
       >
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-ink-3">Interruptible runtime</span>
+        <div className="flex items-center gap-2.5">
+          <HomeGlyph className="h-4 w-4 shrink-0 text-accent" />
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-ink-3">Workspace home</span>
           <MotifLine className="w-20 text-line-2" />
         </div>
 
         <h1 className="mt-6 max-w-[15ch] font-display text-[40px] font-semibold leading-[1.02] tracking-[-0.025em] text-ink md:text-[56px]">
           Change your mind,
           <br />
-          mid&#8209;execution.
+          mid-execution.
         </h1>
 
         <p className="mt-6 max-w-[52ch] text-[15.5px] leading-[1.6] text-ink-2 md:text-[16.5px]">
           Interrupt an agent without throwing away valid work. The runtime preserves what still
           applies, fences results that can no longer commit, and rebuilds only what changed.
         </p>
-
-        {/* decorative mark cluster — desktop only, purely ornamental */}
-        <motion.div
-          aria-hidden="true"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
-          className="pointer-events-none absolute right-0 top-0 hidden h-[190px] w-[240px] lg:block"
-        >
-          <SparkleGlyph className="absolute right-[176px] top-[6px] w-[22px] text-ink-3/55" />
-          <CrossGlyph className="absolute right-[6px] top-[26px] w-[140px] text-line" />
-          <SwirlGlyph strokeWidth={9} className="absolute right-[118px] top-[74px] w-[96px] text-line-2/70" />
-          <HomeGlyph className="absolute right-[30px] top-[112px] w-[54px] text-ink-3/45" />
-        </motion.div>
       </motion.div>
 
       {/* example prompts — refined list, not cards */}
@@ -76,9 +63,17 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         className="mt-14"
       >
         <SectionLabel
-          right={<span className="font-mono text-[10.5px] tracking-[0.08em] text-ink-3">then interrupt it mid-run</span>}
+          right={
+            <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.08em] text-ink-3">
+              <CrossGlyph className="h-3 w-3 text-fence" />
+              then interrupt it mid-run
+            </span>
+          }
         >
-          Try an example
+          <span className="inline-flex items-center gap-1.5">
+            <SparkleGlyph className="h-3.5 w-3.5 text-accent" />
+            Try an example
+          </span>
         </SectionLabel>
 
         <div className="mt-4 border-t border-line" aria-label="Example prompts">

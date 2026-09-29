@@ -1,18 +1,24 @@
 import { RotateCcw, TerminalSquare } from "lucide-react";
 import type { RuntimeState } from "@/runtime/types";
+import type { ThemeId } from "@/theme";
 import { cn } from "@/utils/cn";
 import { IconBtn, ProductMark } from "./ui";
+import { ThemePicker } from "./ThemePicker";
 
 export function AppHeader({
   state,
   devMode,
+  theme,
   onToggleDev,
   onReset,
+  onThemeChange,
 }: {
   state: RuntimeState;
   devMode: boolean;
+  theme: ThemeId;
   onToggleDev: () => void;
   onReset: () => void;
+  onThemeChange: (theme: ThemeId) => void;
 }) {
   const active = ["running", "planning", "interrupting"].includes(state.phase);
   const center =
@@ -45,24 +51,26 @@ export function AppHeader({
       </div>
 
       {/* controls */}
-      <div className="ml-auto flex items-center gap-2.5">
+      <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
         <div className="flex items-center gap-2" role="status" aria-live="polite">
           {active ? (
             <>
-              <span className="pulse-soft h-[7px] w-[7px] rounded-full bg-ink" aria-hidden="true" />
-              <span className="tnum whitespace-nowrap text-[12.5px] font-medium text-ink">
+              <span className="pulse-soft h-[7px] w-[7px] rounded-full bg-accent" aria-hidden="true" />
+              <span className="tnum hidden whitespace-nowrap text-[12.5px] font-medium text-ink sm:inline">
                 {state.running_tasks > 0 ? `${state.running_tasks} running` : state.phase === "interrupting" ? "evaluating" : "working"}
               </span>
             </>
           ) : (
             <>
               <span className={cn("h-[7px] w-[7px] rounded-full", state.phase === "complete" ? "bg-ok" : "bg-line-2")} aria-hidden="true" />
-              <span className="whitespace-nowrap text-[12.5px] text-ink-3">{state.phase === "complete" ? "complete" : "idle"}</span>
+              <span className="hidden whitespace-nowrap text-[12.5px] text-ink-3 sm:inline">{state.phase === "complete" ? "complete" : "idle"}</span>
             </>
           )}
         </div>
 
         <span className="h-4 w-px bg-line" aria-hidden="true" />
+
+        <ThemePicker value={theme} onChange={onThemeChange} />
 
         <IconBtn label="Reset runtime" onClick={onReset}>
           <RotateCcw size={15} strokeWidth={1.75} />

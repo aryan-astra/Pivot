@@ -76,24 +76,59 @@ colour comes from `currentColor` / PIVOT tokens. Zero new dependencies.
 
 Adaptations (section 3):
 - Line field is always transparent (the workspace paints `--color-paper`); the
-  original's painted vignette required an opaque background, so edge falloff is
-  a CSS mask instead (`.lines-veil` in `index.css`) — it clears the reading
-  column and keeps the strongest lines in the margins.
+  original's painted vignette required an opaque background, so the `.lines-veil`
+  mask in `index.css` keeps the reading column visible without hiding the field.
+  Contrast is theme-aware: the Ink palette uses white strokes; the light palettes
+  use deeper colored strokes. The mask preserves 12% opacity at center and fades
+  fully in at the edges, keeping the reading column calm while the white curves
+  remain visible at the edges.
 - Container is `pointer-events-none`; pointer tracking listens on `window` and
   maps into container space, so the field can never swallow clicks.
 - `prefers-reduced-motion` renders one static centred frame (no rAF loop);
   the loop also pauses off-screen and on hidden tabs (`IntersectionObserver` +
   `visibilitychange`), and DPR is capped at 2.
 - Mobile uses the orbiting mode (touch-follow would fight scrolling).
-- Defaults retuned for ink/paper: `rgba(29,29,27,0.16)` strokes, 6–26 lines
-  instead of up to 45.
-- Glyphs: `aria-hidden`, no interaction; used once as an ornament cluster in
-  the empty-state hero (`lg`+ only — hidden below so it never crowds content).
+- The app instance renders 10–28 theme-colored lines at 94% opacity and 1px
+  stroke width; the component retains a lower 6–26-line default for reuse.
+- The SVGs are placed by purpose, not as a floating cluster: `HomeGlyph` labels
+  the workspace landing state, `SparkleGlyph` marks suggested examples,
+  `CrossGlyph` marks interruption notices, and `SwirlGlyph` marks recovery notes.
 
 Placement: line field as a `z-0` layer inside `<main>` (scroll surface is
-`relative z-10`); glyphs in `EmptyState` only, so they disappear once work
-starts.
+`relative z-10`). The home and suggestion marks belong to the empty state;
+the interruption and recovery marks appear with their corresponding stream events.
+
+Theme check: selectable `Warm paper`, `Arctic`, `Sakura`, and `Ink` (soft
+charcoal/slate rather than near-black). The former `obsidian` preference
+migrates to `Ink`; unknown or retired IDs fall back to `Warm paper`.
 
 Also fixed while reviewing this pass: the header centre printed a dangling `/`
 separator when `state_version` was 0 — the version and its separator now render
-together, only above version 0.
+together, only above version 0. Network polling now normalizes backend epoch
+seconds to browser milliseconds and keeps synthesized settled-run events stable
+across snapshots, so the timeline shows local clock times and cannot rewind or
+replay an interruption notice.
+
+### 2026-09-28 — React Bits interaction bundle (8 components)
+
+| Component | PIVOT integration |
+| --- | --- |
+| `CallChip` | Tool-call status, arguments, and elapsed time in execution rows and Dev Mode. |
+| `Strands` | Theme-colored hero ornament and compact live execution activity field. |
+| `ClickSpark` | Restrained, theme-aware click feedback around the workspace. |
+| `SpringCheck` | Animated, truthful completion state for execution to-dos. |
+| `VoicePill` | User-initiated microphone control, waveform, and recording state in the composer. |
+| `ThoughtLine` | Working/settled status and active tool labels alongside execution history. |
+| `StatusMark` | Shared task-state/progress glyphs across execution, Dev Mode, and the inline site window. |
+| `PromptBar` | Controlled multiline composer connected to the existing send/interruption contract. |
+
+Adaptations: components use the existing `framer-motion` and `lucide-react`
+stacks plus PIVOT CSS tokens rather than adding a second animation or icon
+runtime. Animation respects reduced-motion preferences; tool and runtime status
+remain driven by the backend/embedded runtime, not component-local mock state.
+`VoicePill` uses speech recognition only after a microphone action and surfaces
+browser-permission/service failures; the composer discloses that the browser
+speech service processes dictation. The site window appears inline beside an
+active search task—there is no global browser-preview control or blocking modal.
+It is explicitly labelled as a local simulation and makes no outbound browsing
+requests; live site content requires a connected browser adapter.

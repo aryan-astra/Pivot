@@ -1,32 +1,162 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper: #f7f7f5;
-  --color-surface: #ffffff;
-  --color-surface-2: #fafaf8;
-  --color-ink: #1d1d1b;
-  --color-ink-2: #6b6b66;
-  --color-ink-3: #92928c;
-  --color-line: #e7e6e1;
-  --color-line-2: #d9d8d2;
-  --color-dark: #181817;
-  --color-dark-text: #f4f3ef;
-  --color-ok: #3d7a52;
-  --color-warn: #b56a28;
-  --color-danger: #b84f49;
-  --color-info: #4f6f91;
-  --color-fence: #9a6a27;
+  --color-paper: #f4f1e9;
+  --color-surface: #fbfaf7;
+  --color-surface-2: #efede6;
+  --color-ink: #25241f;
+  --color-ink-2: #5e5b52;
+  --color-ink-3: #6e6b60;
+  --color-line: #e3dfd5;
+  --color-line-2: #d1ccbf;
+  --color-dark: #24231f;
+  --color-dark-text: #fcfbf7;
+  --color-ok: #356d49;
+  --color-warn: #81511f;
+  --color-danger: #a3433e;
+  --color-info: #4b698d;
+  --color-fence: #81511f;
+  --color-accent: #925621;
+  --color-accent-soft: #f2e9dd;
+  --color-tool-surface: #eae7de;
+  --color-tool-ink: #37362f;
+  --color-browser-chrome: #f3f1eb;
+  --color-browser-window: #fbfaf7;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  --font-mono: "IBM Plex Mono", "Inter", ui-monospace, "SF Mono", monospace;
 
-  --shadow-lift: 0 1px 2px rgb(29 29 27 / 0.04), 0 4px 14px rgb(29 29 27 / 0.05);
-  --shadow-float: 0 1px 2px rgb(29 29 27 / 0.05), 0 8px 24px rgb(29 29 27 / 0.08);
+  --shadow-lift: 0 1px 2px rgb(39 35 29 / 0.04), 0 4px 14px rgb(39 35 29 / 0.06);
+  --shadow-float: 0 1px 2px rgb(39 35 29 / 0.08), 0 12px 36px rgb(17 21 31 / 0.18);
 }
 
 :root {
   color-scheme: light;
+  --line-canvas: rgb(52 62 72 / 0.34);
+  --workspace-glow-1: rgb(190 133 72 / 0.1);
+  --workspace-glow-2: rgb(70 119 145 / 0.075);
+}
+
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --color-paper: #f4f1e9;
+  --color-surface: #fbfaf7;
+  --color-surface-2: #efede6;
+  --color-ink: #25241f;
+  --color-ink-2: #5e5b52;
+  --color-ink-3: #6e6b60;
+  --color-line: #e3dfd5;
+  --color-line-2: #d1ccbf;
+  --color-dark: #24231f;
+  --color-dark-text: #fcfbf7;
+  --color-ok: #356d49;
+  --color-warn: #81511f;
+  --color-danger: #a3433e;
+  --color-info: #4b698d;
+  --color-fence: #81511f;
+  --color-accent: #925621;
+  --color-accent-soft: #f2e9dd;
+  --color-tool-surface: #eae7de;
+  --color-tool-ink: #37362f;
+  --color-browser-chrome: #f3f1eb;
+  --color-browser-window: #fbfaf7;
+  --line-canvas: rgb(52 62 72 / 0.34);
+  --workspace-glow-1: rgb(190 133 72 / 0.1);
+  --workspace-glow-2: rgb(70 119 145 / 0.075);
+  --shadow-lift: 0 1px 2px rgb(39 35 29 / 0.04), 0 4px 14px rgb(39 35 29 / 0.06);
+  --shadow-float: 0 1px 2px rgb(39 35 29 / 0.08), 0 12px 36px rgb(17 21 31 / 0.18);
+}
+
+
+:root[data-theme="arctic"] {
+  color-scheme: light;
+  --color-paper: #edf4f8;
+  --color-surface: #f9fcff;
+  --color-surface-2: #e7f0f6;
+  --color-ink: #1b3043;
+  --color-ink-2: #4b6475;
+  --color-ink-3: #526b7b;
+  --color-line: #d7e3eb;
+  --color-line-2: #bfd0dc;
+  --color-dark: #286f9a;
+  --color-dark-text: #f5fbff;
+  --color-ok: #2f7056;
+  --color-warn: #8b5c20;
+  --color-danger: #a5424e;
+  --color-info: #276a92;
+  --color-fence: #8b5c20;
+  --color-accent: #276a92;
+  --color-accent-soft: #d9ebf6;
+  --color-tool-surface: #e2edf4;
+  --color-tool-ink: #27455d;
+  --color-browser-chrome: #e9f2f7;
+  --color-browser-window: #f9fcff;
+  --line-canvas: rgb(43 89 124 / 0.34);
+  --workspace-glow-1: rgb(70 150 198 / 0.11);
+  --workspace-glow-2: rgb(70 119 181 / 0.075);
+  --shadow-lift: 0 1px 2px rgb(35 62 82 / 0.04), 0 4px 14px rgb(35 62 82 / 0.06);
+  --shadow-float: 0 1px 2px rgb(35 62 82 / 0.08), 0 12px 36px rgb(18 48 69 / 0.18);
+}
+
+:root[data-theme="sakura"] {
+  color-scheme: light;
+  --color-paper: #f8eff4;
+  --color-surface: #fffafd;
+  --color-surface-2: #f2e6ee;
+  --color-ink: #342337;
+  --color-ink-2: #674c64;
+  --color-ink-3: #785f76;
+  --color-line: #eadbe6;
+  --color-line-2: #d8c3d4;
+  --color-dark: #a94d78;
+  --color-dark-text: #fff8fc;
+  --color-ok: #347052;
+  --color-warn: #875b2a;
+  --color-danger: #a04058;
+  --color-info: #4e6989;
+  --color-fence: #875b2a;
+  --color-accent: #9b3f69;
+  --color-accent-soft: #f1dce8;
+  --color-tool-surface: #f0e3ed;
+  --color-tool-ink: #583d57;
+  --color-browser-chrome: #f6ecf3;
+  --color-browser-window: #fffafd;
+  --line-canvas: rgb(137 67 112 / 0.32);
+  --workspace-glow-1: rgb(193 102 151 / 0.12);
+  --workspace-glow-2: rgb(121 104 180 / 0.075);
+  --shadow-lift: 0 1px 2px rgb(74 44 67 / 0.04), 0 4px 14px rgb(74 44 67 / 0.06);
+  --shadow-float: 0 1px 2px rgb(74 44 67 / 0.08), 0 12px 36px rgb(74 44 67 / 0.16);
+}
+
+:root[data-theme="ink"] {
+  color-scheme: dark;
+  --color-paper: #27313b;
+  --color-surface: #313d47;
+  --color-surface-2: #3d4a55;
+  --color-ink: #f1f4f5;
+  --color-ink-2: #cbd4db;
+  --color-ink-3: #acb8c2;
+  --color-line: #4d5c68;
+  --color-line-2: #657582;
+  --color-dark: #b1d2db;
+  --color-dark-text: #28323a;
+  --color-ok: #91cba5;
+  --color-warn: #e9c27f;
+  --color-danger: #ef9894;
+  --color-info: #b1cfee;
+  --color-fence: #e7b36e;
+  --color-accent: #b5d9e2;
+  --color-accent-soft: #455d68;
+  --color-tool-surface: #3f4c58;
+  --color-tool-ink: #e5ebef;
+  --color-browser-chrome: #3b4853;
+  --color-browser-window: #313d47;
+  --line-canvas: rgb(255 255 255 / 0.78);
+  --workspace-glow-1: rgb(135 183 201 / 0.2);
+  --workspace-glow-2: rgb(183 160 200 / 0.14);
+  --shadow-lift: 0 1px 2px rgb(6 11 16 / 0.13), 0 4px 14px rgb(6 11 16 / 0.16);
+  --shadow-float: 0 1px 2px rgb(6 11 16 / 0.18), 0 12px 36px rgb(6 11 16 / 0.24);
 }
 
 html,
@@ -46,7 +176,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-ink);
+  background: var(--color-accent);
   color: var(--color-dark-text);
 }
 
@@ -69,7 +199,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid rgb(29 29 27 / 0.65);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 72%, transparent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -102,7 +232,7 @@ body {
   top: -4%;
   height: 1px;
   background: var(--color-fence);
-  box-shadow: 0 0 0 0.5px rgb(154 106 39 / 0.35);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--color-fence) 45%, transparent);
   animation: sweep-line 1.15s cubic-bezier(0.6, 0.05, 0.35, 1) forwards;
   pointer-events: none;
 }
@@ -113,7 +243,7 @@ body {
   right: 0;
   top: 1px;
   height: 34px;
-  background: linear-gradient(to bottom, rgb(154 106 39 / 0.07), transparent);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--color-fence) 11%, transparent), transparent);
 }
 
 @keyframes pulse-soft {
@@ -131,13 +261,13 @@ body {
 
 @keyframes ring-breathe {
   0% {
-    box-shadow: 0 0 0 0 rgb(29 29 27 / 0.28);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 38%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 5px rgb(29 29 27 / 0);
+    box-shadow: 0 0 0 5px transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(29 29 27 / 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 .ring-breathe {
@@ -172,21 +302,66 @@ body {
   }
 }
 
-/* faint atmospheric depth — nearly imperceptible */
+/* Full-surface click feedback; the canvas sits above the app without taking input. */
+.click-spark-root {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.click-spark-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.click-spark-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.spring-check.task-check {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: none;
+  gap: 0;
+}
+.spring-check.task-check .spring-check__label { display: none; }
+
+/* Soft theme-aware depth behind the reading column. */
 .workspace-bg {
   background:
-    radial-gradient(1100px 480px at 78% -8%, rgb(29 29 27 / 0.028), transparent 62%),
-    radial-gradient(900px 420px at 8% 108%, rgb(79 111 145 / 0.03), transparent 60%),
+    radial-gradient(1100px 480px at 78% -8%, var(--workspace-glow-1), transparent 62%),
+    radial-gradient(900px 420px at 8% 108%, var(--workspace-glow-2), transparent 60%),
     var(--color-paper);
 }
 
-/* ambient line field: clears the reading column, strongest toward the edges */
+/* The Framer line field stays visible in the reading column, with a soft edge falloff. */
 .lines-veil {
   -webkit-mask-image: radial-gradient(
     125% 100% at 50% 46%,
-    transparent 34%,
-    rgb(0 0 0 / 0.45) 66%,
+    rgb(0 0 0 / 0.12) 0%,
+    rgb(0 0 0 / 0.22) 36%,
+    rgb(0 0 0 / 0.62) 70%,
     #000 100%
   );
-  mask-image: radial-gradient(125% 100% at 50% 46%, transparent 34%, rgb(0 0 0 / 0.45) 66%, #000 100%);
+  mask-image: radial-gradient(125% 100% at 50% 46%, rgb(0 0 0 / 0.12) 0%, rgb(0 0 0 / 0.22) 36%, rgb(0 0 0 / 0.62) 70%, #000 100%);
+}
+
+@media (max-width: 440px) {
+  .theme-picker-dialog {
+    position: fixed;
+    top: 70px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
 }

@@ -58,6 +58,7 @@ class Runtime:
         self._running = False
         await self.scheduler.cancel_all("runtime_shutdown")
         self.event_bus.emit("RUNTIME_STOPPED", run_id=self._run_id)
+        await self.event_bus.drain()
         self.state.close()
 
     def register_tool(self, name: str, handler: Callable) -> None:

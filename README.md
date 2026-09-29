@@ -73,6 +73,32 @@ Copy `.env.example` to `.env` to override `PORT`, `DB_PATH`, `CORS_ORIGINS`,
 
 Full script: `docs/DEMO_RUNBOOK.md`.
 
+## Interface
+
+The workspace renders the run as a stream: user request → execution plan
+(task cards with tool calls, live progress, preserved/fenced/invalidated
+states) → interruption notice → impact analysis (preserved / invalidated /
+fenced counts plus the constraint change) → recovery note → settled summary.
+
+- During an active search task, a small inline site preview appears
+  automatically beside the execution card. It is labelled as a local
+  simulation — no live site content is loaded and there is no preview
+  button, modal, or other permanent control.
+- **Dev Mode** (header toggle) opens the runtime inspector: state matrix,
+  constraints, interruption readiness, last impact, execution graph, and a
+  scrollable event timeline.
+- Four themes: Warm paper, Arctic, Sakura, and Ink (soft charcoal with a
+  white line field). The animated line background stays behind the reading
+  column, respects `prefers-reduced-motion`, and never intercepts clicks.
+- Composer: multiline prompt bar with voice dictation (browser speech
+  service, permission failures surfaced inline). `/` focuses the prompt,
+  `Esc` closes the inspector.
+- Component roles: CallChip = tool commands, Strands = working state,
+  ClickSpark = click feedback, SpringCheck = to-dos, VoicePill = audio
+  prompts, ThoughtLine = agent working/settled status, StatusMark = task
+  state glyphs, PromptBar = prompt input. Details and adaptation notes:
+  `docs/21ST_COMPONENT_INTEGRATION.md`.
+
 ## API
 
 | Method | Path | Purpose |
