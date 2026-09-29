@@ -11,7 +11,8 @@ import { LiveTaskPreview, isBrowserSearchTask } from "./LiveTaskPreview";
  * list — it hovers near the bottom-left corner, clear of the composer, and
  * can be dragged by its header to any other corner. Selection priority:
  *
- *   1. a live search task keeps its site window while the run is active;
+ *   1. a simulated search task (embedded demo runtime) keeps its site window
+ *      while the run is active — real browser runs never show the mockup;
  *   2. the newest real browser capture — visible while the rest of the run
  *      continues and pinned after it settles;
  *   3. otherwise any running/pending task falls back to the honest activity
@@ -45,7 +46,8 @@ export function FloatingPreview({
   const live = phase === "running" || phase === "planning" || phase === "interrupting";
   const current = tasks.filter((task) => task.created_in === version);
   const runningTask = current.find((task) => task.status === "running") ?? current.find((task) => task.status === "pending");
-  const siteWindowTask = live && runningTask && isBrowserSearchTask(runningTask) ? runningTask : undefined;
+  const siteWindowTask =
+    live && runningTask && runningTask.simulated && isBrowserSearchTask(runningTask) ? runningTask : undefined;
   const pinnedCapture = [...current].reverse().find((task) => task.screenshot);
   const previewTask = siteWindowTask ?? pinnedCapture ?? (live ? runningTask : undefined);
   const settled = !siteWindowTask && Boolean(pinnedCapture) && previewTask === pinnedCapture && !live;

@@ -92,15 +92,16 @@ fenced counts plus the constraint change) → recovery note → settled summary.
 - Four themes: Warm paper, Arctic, Sakura, and Ink (soft charcoal with a
   white line field). The animated line background stays behind the reading
   column, respects `prefers-reduced-motion`, and never intercepts clicks.
-- Composer: multiline prompt bar with voice dictation (browser speech
+- PromptBar: multiline prompt bar with voice dictation (browser speech
   service, permission failures surfaced inline). `/` focuses the prompt,
   `Esc` closes the inspector.
 - Example prompts and the offline fallback's scripted sample results sit
   behind a Demo toggle in Dev Mode (off by default, remembered per browser).
-- Browse requests (`go to <url>`) drive a real local Chromium (Playwright):
-  open → capture → read, shown in a floating, draggable preview window that
-  stays on screen across steps, with titles + text in the finished task
-  cards. No domain allowlist (http/https only).
+- Browse requests (`go to <url>`) and web-search requests (`search for <q>`,
+  `google <q>`, `look up <q>` — routed to a real search engine) drive a real
+  local Chromium (Playwright): open → capture → read, shown in a floating,
+  draggable preview window that stays on screen across steps, with titles +
+  text in the finished task cards. No domain allowlist (http/https only).
 - Component roles: CallChip = tool commands, Strands = working state,
   ClickSpark = click feedback, SpringCheck = to-dos, VoicePill = audio
   prompts, ThoughtLine = agent working/settled status, StatusMark = task

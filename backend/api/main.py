@@ -17,7 +17,7 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
@@ -175,7 +175,7 @@ async def get_state():
 
 
 @app.get("/api/events")
-async def get_events(event_type: Optional[str] = None, limit: int = 100):
+async def get_events(event_type: Optional[str] = None, limit: int = Query(100, ge=1)):
     if not _runtime:
         return JSONResponse({"error": "Runtime not initialized"}, status_code=503)
     events = _runtime.event_bus.get_history(event_type=event_type, limit=limit)
@@ -237,14 +237,23 @@ async def websocket_endpoint(websocket: WebSocket):
         async def listen_ws():
             while True:
                 data = await websocket.receive_text()
-                msg = json.loads(data)
+                try:
+                    msg = json.loads(data)
+                except (ValueError, TypeError):
+                    continue  # malformed frame — ignore, never crash the socket
+                if not isinstance(msg, dict):
+                    continue
                 if msg.get("type") == "message":
+                    text = msg.get("text")
+                    if not isinstance(text, str):
+                        continue
                     result = await handle_message(
-                        MessageRequest(text=msg["text"], is_interruption=msg.get("is_interruption", False))
+                        MessageRequest(text=text, is_interruption=msg.get("is_interruption", False))
                     )
                     await websocket.send_json({"type": "command_result", "data": result})
                 elif msg.get("type") == "interrupt":
-                    result = await handle_interrupt(MessageRequest(text=msg["text"]))
+                    text = msg.get("text") or ""
+                    result = await handle_interrupt(MessageRequest(text=text))
                     await websocket.send_json({"type": "command_result", "data": result})
 
         async def forward_events():

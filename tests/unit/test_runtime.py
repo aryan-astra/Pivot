@@ -271,6 +271,23 @@ class TestSemanticDiff:
         assert "task_2" in impact["preserved"]
         assert "task_3" in impact["stale"]
 
+    def test_completed_task_with_changed_read_is_stale(self):
+        """Completed work whose inputs changed must be invalidated, not
+        reported as preserved-and-reused (the UI's Impact copy claims reuse)."""
+        diff = SemanticDiff(
+            modified={"ram": ("8GB", "16GB")},
+            unchanged={"category": "laptop"},
+        )
+        tasks = {
+            "done_affected": {"reads": ["ram"], "status": "completed", "semantic_scope": []},
+            "done_unaffected": {"reads": ["category"], "status": "completed", "semantic_scope": []},
+            "preserved_affected": {"reads": ["ram"], "status": "preserved", "semantic_scope": []},
+        }
+        impact = compute_impact_analysis(diff, tasks)
+        assert "done_affected" in impact["stale"]
+        assert "done_unaffected" in impact["preserved"]
+        assert "preserved_affected" in impact["stale"]
+
 
 class TestInterruptionScorer:
     def test_initial_score_zero(self):
@@ -503,6 +520,63 @@ class TestScheduler:
         assert len(started) <= 5
         await scheduler.cancel_all("test_cleanup")
 
+    @pytest.mark.asyncio
+    async def test_cancel_persists_terminal_status(self):
+        """Cancellation must reach state — otherwise the task spins as
+        "running" forever while the scheduler reports zero running tasks."""
+        persisted = {}
+
+        async def on_terminal(task_id, fields):
+            persisted[task_id] = fields
+
+        sched = TaskScheduler(EventBus(), DependencyGraph(), on_terminal=on_terminal)
+
+        async def slow_work(cancel_event):
+            await asyncio.sleep(10)
+            return {}
+
+        await sched.schedule("task_c", lambda ce: slow_work(ce), timeout=10.0)
+        await asyncio.sleep(0.05)
+        assert await sched.cancel_task("task_c", "stop") is True
+        assert persisted["task_c"]["status"] == "cancelled"
+        assert persisted["task_c"]["cancelled_at"] > 0
+
+    @pytest.mark.asyncio
+    async def test_handler_failure_persists_terminal_status(self):
+        persisted = {}
+
+        async def on_terminal(task_id, fields):
+            persisted[task_id] = fields
+
+        sched = TaskScheduler(EventBus(), DependencyGraph(), on_terminal=on_terminal)
+
+        async def boom(cancel_event):
+            raise RuntimeError("kaboom")
+
+        await sched.schedule("task_f", lambda ce: boom(ce))
+        await asyncio.sleep(0.1)
+        assert persisted["task_f"]["status"] == "failed"
+        assert persisted["task_f"]["failed_at"] > 0
+        assert "kaboom" in persisted["task_f"]["result"]["error"]
+
+    @pytest.mark.asyncio
+    async def test_timeout_persists_terminal_status(self):
+        persisted = {}
+
+        async def on_terminal(task_id, fields):
+            persisted[task_id] = fields
+
+        sched = TaskScheduler(EventBus(), DependencyGraph(), on_terminal=on_terminal)
+
+        async def hang(cancel_event):
+            await asyncio.sleep(5)
+            return {}
+
+        await sched.schedule("task_t", lambda ce: hang(ce), timeout=0.05)
+        await asyncio.sleep(0.3)
+        assert persisted["task_t"]["status"] == "failed"
+        assert persisted["task_t"]["result"]["error"] == "timeout"
+
 
 class TestEndToEndInterruption:
     """End-to-end test for the interruption pipeline."""
@@ -606,6 +680,119 @@ class TestEndToEndInterruption:
         state = runtime.get_runtime_state()
         assert state["state_version"] >= 4
 
+        await runtime.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_tasks_to_terminal_status(self):
+        """Stop must never leave tasks 'running' in state: a stuck spinner
+        blocks the settled check, the closing answer, and the results block."""
+        from runtime.runtime import Runtime
+
+        runtime = Runtime()
+        await runtime.start()
+        intent = IntentState(
+            domain="shopping",
+            constraints={"ram": "8GB", "max_price": 60000},
+            targets=["Amazon"],
+            raw_text="Find laptops under 60000 with 8GB RAM",
+        )
+        await runtime.submit_intent(intent)
+        await asyncio.sleep(0.3)
+
+        result = await runtime.handle_interruption("stop")
+        assert result["action"] == "cancelled"
+
+        statuses = {t["status"] for t in runtime.state.get_all_tasks().values()}
+        assert statuses, "expected tasks to exist"
+        assert "running" not in statuses
+        assert statuses <= {"completed", "cancelled", "failed", "preserved", "fenced"}
+        await runtime.stop()
+
+    @pytest.mark.asyncio
+    async def test_noop_interruption_keeps_version_and_work(self):
+        """A no-change interruption ('keep going') must not bump the version,
+        fence live work, or replan — just acknowledge and continue."""
+        from runtime.runtime import Runtime
+
+        runtime = Runtime()
+        await runtime.start()
+        intent = IntentState(
+            domain="shopping",
+            constraints={"ram": "8GB", "max_price": 60000},
+            targets=["Amazon"],
+            raw_text="Find laptops under 60000 with 8GB RAM",
+        )
+        await runtime.submit_intent(intent)
+        version = runtime.state.version
+
+        result = await runtime.handle_interruption("sounds good keep going please")
+        assert result["action"] == "noop"
+        assert runtime.state.version == version
+        await runtime.stop()
+
+    @pytest.mark.asyncio
+    async def test_readiness_score_reflects_running_work(self):
+        """get_runtime_state must surface a computed readiness score —
+        compute() was never wired, so the Inspector always showed 0%."""
+        from runtime.runtime import Runtime
+
+        runtime = Runtime()
+        await runtime.start()
+        intent = IntentState(
+            domain="shopping",
+            constraints={"ram": "8GB"},
+            targets=["Amazon"],
+            raw_text="Find laptops with 8GB RAM",
+        )
+        await runtime.submit_intent(intent)
+        await asyncio.sleep(0.2)
+
+        state = runtime.get_runtime_state()
+        assert state["interruption_score"] > 0
+        await runtime.stop()
+
+    @pytest.mark.asyncio
+    async def test_stale_commit_is_fenced(self):
+        """A result committing after the state moved on must be rejected and
+        marked fenced — the real assertion of the stale-result protection."""
+        from runtime.runtime import Runtime
+
+        runtime = Runtime()
+        await runtime.start()
+        await runtime.state.update_intent(
+            IntentState(domain="shopping", constraints={"ram": "8GB"}), "v1"
+        )
+        origin = runtime.state.version
+
+        async def handler(task, cancel_event):
+            # Commit after the state has moved on.
+            await runtime.state.update_intent(
+                IntentState(domain="shopping", constraints={"ram": "16GB"}), "v2"
+            )
+            return {"value": 1}
+
+        runtime.register_tool("probe", handler)
+        task = {
+            "task_id": "task_stale_probe",
+            "operation": "probe",
+            "state_version": origin,
+            "reads": ["ram"],
+            "execution_class": ExecutionClass.INTERRUPTIBLE.value,
+            "label": "Probe",
+            "dependencies": [],
+        }
+        await runtime.state.register_task(task)
+        await runtime._execute_task(task)
+        await asyncio.sleep(0.15)
+
+        stored = runtime.state.get_task("task_stale_probe")
+        assert stored["status"] == TaskStatus.FENCED.value
+        rejected = [
+            e
+            for e in runtime.event_bus.get_history(limit=200)
+            if e.event_type == "STALE_RESULT_REJECTED"
+        ]
+        assert any(e.task_id == "task_stale_probe" for e in rejected)
         await runtime.stop()
 
 

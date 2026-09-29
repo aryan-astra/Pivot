@@ -36,7 +36,9 @@ class Runtime:
         self.event_bus = EventBus()
         self.state = StateManager(self.event_bus, db_path)
         self.graph = DependencyGraph()
-        self.scheduler = TaskScheduler(self.event_bus, self.graph)
+        self.scheduler = TaskScheduler(
+            self.event_bus, self.graph, on_terminal=self._persist_terminal_status
+        )
         self.idempotency = IdempotencyGuard()
         self.interruption_scorer = InterruptionScorer()
         self.classifier = InterruptionClassifier()
@@ -63,6 +65,16 @@ class Runtime:
 
     def register_tool(self, name: str, handler: Callable) -> None:
         self._tool_registry[name] = handler
+
+    async def _persist_terminal_status(self, task_id: str, fields: dict[str, Any]) -> None:
+        """Scheduler callback: persist cancel/failure/timeout outcomes.
+
+        task_coroutine only reaches its own persistence on the success and
+        fencing paths; cancellation, exceptions, and timeouts unwind through
+        the scheduler, which must record the terminal status itself or the
+        task stays "running" in state forever.
+        """
+        await self.state.update_task(task_id, fields)
 
     async def submit_intent(self, intent: IntentState) -> dict[str, Any]:
         """Submit a new user intent and begin execution."""
@@ -113,7 +125,13 @@ class Runtime:
         new_intent = self._parse_modification(transcript, self.state.intent)
         if new_intent:
             diff = compute_semantic_diff(self.state.intent, new_intent)
-            return await self._handle_interruption(self.state.intent, new_intent, diff)
+            if diff.has_changes:
+                return await self._handle_interruption(self.state.intent, new_intent, diff)
+            # Nothing semantic changed ("sounds good keep going") — do not
+            # bump the version, fence live work, or replan. Mirrors the
+            # has_changes guard on the fresh-message path.
+            self.interruption_scorer.record_false_interruption()
+            return {"action": "noop", "reason": "no_semantic_change"}
 
         return {"action": "queued", "transcript": transcript}
 
@@ -187,10 +205,10 @@ class Runtime:
             impact["stale"], reason="semantic_invalidation"
         )
 
-        # Archive stale completed tasks
+        # Archive stale completed/preserved tasks (superseded by the change)
         for task_id in impact["stale"]:
             task = self.state.get_task(task_id)
-            if task and task.get("status") == "completed":
+            if task and task.get("status") in (TaskStatus.COMPLETED.value, TaskStatus.PRESERVED.value):
                 await self.state.archive_task(task_id, "semantic_invalidation")
 
         # Fence running tasks that will produce stale results
@@ -408,7 +426,9 @@ class Runtime:
             # Each step is self-contained (fresh browser context) so tasks stay
             # independently cancellable and re-runnable.
             url = str(intent.constraints.get("url", ""))
+            query = str(intent.constraints.get("query", ""))
             host = (intent.targets or ["web"])[0]
+            nav_label = f"Search the web for {query}" if query else f"Open {host}"
             nav_id = gen_id("task_")
             snap_id = gen_id("task_")
             ext_id = gen_id("task_")
@@ -416,7 +436,7 @@ class Runtime:
             plan.append({
                 "task_id": nav_id,
                 "operation": "browse_navigate",
-                "label": f"Open {host}",
+                "label": nav_label,
                 "reads": ["url"],
                 "execution_class": ExecutionClass.INTERRUPTIBLE.value,
                 "dependencies": [],
@@ -510,6 +530,7 @@ class Runtime:
             timeout=task.get("timeout_seconds", 30.0),
             run_id=self._run_id,
             state_version=self.state.version,
+            label=str(task.get("label", "")),
         )
 
     async def _default_task_handler(
@@ -568,6 +589,32 @@ class Runtime:
         if queue in self._ws_subscribers:
             self._ws_subscribers.remove(queue)
 
+    def _readiness_score(self) -> float:
+        """Interruption readiness from live runtime signals.
+
+        compute() was previously only exercised by tests — this wiring is
+        what makes the Inspector's score reflect actual state (executing
+        vs idle, interruptible vs commit work, false/true interruption
+        history). Speech/transcript signals stay at their defaults: this
+        build has no live speech feed to measure.
+        """
+        running = [t for t in self.state.get_all_tasks().values() if t.get("status") == "running"]
+        executing = bool(running) or self.scheduler.running_count > 0
+        interruptible = all(
+            t.get("execution_class", "interruptible") == "interruptible" for t in running
+        )
+        readiness = self.interruption_scorer.compute(
+            agent_executing=executing,
+            current_task_interruptible=interruptible,
+            commit_in_progress=any(
+                t.get("execution_class") in ("commit", "critical") for t in running
+            ),
+            speculative_work_running=any(
+                t.get("execution_class") == "speculative" for t in running
+            ),
+        )
+        return readiness.score
+
     def get_runtime_state(self) -> dict[str, Any]:
         """Get complete runtime state for dashboard."""
         return {
@@ -583,7 +630,7 @@ class Runtime:
             "tasks": self.state.get_all_tasks(),
             "archived_tasks": self.state.get_archived_tasks(),
             "graph": self.graph.to_dict(),
-            "interruption_score": self.interruption_scorer.current_score,
+            "interruption_score": self._readiness_score(),
             "running_tasks": self.scheduler.running_count,
             "event_count": self.event_bus.event_count,
         }

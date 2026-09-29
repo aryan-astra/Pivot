@@ -26,10 +26,12 @@ export function isBrowserSearchTask(task: Task): boolean {
 
 /**
  * The card inside the floating picture-in-picture preview window (see
- * FloatingPreview). Search tasks get the site window; every other task gets
- * the honest activity card instead — never a fabricated site. Real browser
- * captures render as images (during the run and pinned after it settles);
- * tasks without captures disclose the local simulation.
+ * FloatingPreview). Simulated search tasks get the site window — the embedded
+ * demo's stand-in; real browser runs get the honest activity card instead,
+ * which upgrades to the real capture the moment one lands. Never a fabricated
+ * site: captures render as real pixels (live during the run, pinned after it
+ * settles), a still-loading browser says so, and tasks that ran without one
+ * disclose the local simulation.
  *
  * Optional chrome: `onHeaderPointerDown` turns the header row into a drag
  * handle (the floating window follows it), `collapsed` + `onToggleCollapsed`
@@ -84,6 +86,8 @@ export function LiveTaskPreview({
 
   if (!siteWindow) {
     const live = Boolean(task.screenshot);
+    const browseOp = task.operation.startsWith("browse_");
+    const badge = live ? (settled ? "final" : "live") : task.simulated ? "demo" : browseOp ? "opening" : "local";
     return (
       <section
         aria-label={`${task.label} ${settled ? "final capture" : "live task"} preview`}
@@ -106,7 +110,7 @@ export function LiveTaskPreview({
                     : "border-fence/30 bg-fence/5 text-fence",
                 )}
               >
-                {live ? (settled ? "final" : "live") : "demo"}
+                {badge}
               </span>
             </div>
             <p className="truncate font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">{statusLine}</p>
@@ -138,7 +142,11 @@ export function LiveTaskPreview({
                 ? settled
                   ? <span>What the agent saw when it finished — real pixels from the local browser.</span>
                   : <span>Live capture from the running browser.</span>
-                : <span>This is a local simulation; no live site content is loaded.</span>}
+                : task.simulated
+                  ? <span>This is a local simulation; no live site content is loaded.</span>
+                  : browseOp
+                    ? <span>Opening the page in the local browser — the capture appears here the moment it renders.</span>
+                    : <span>No live page for this step — it works on runtime state, not the web.</span>}
             </p>
           </>
         )}

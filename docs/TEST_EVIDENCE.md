@@ -280,3 +280,62 @@ Verified on this pass:
   run, collapse, and drag.
 - Suite: 78 passed; `tsc --noEmit` clean; `vite build` clean (one transient
   rollup failure on first run, clean on rerun).
+
+## Final review + web-search pass (2026-09-29)
+
+Suite: **97 passed** (78 → 97: search routing, scheduler terminal
+persistence, noop interruption, live readiness score, stale-commit fence,
+completed-read staleness, `content_text` chrome trim); `tsc --noEmit`
+clean; `vite build` clean (1,208.31 kB single-file, 8.87s).
+
+Reviewer findings, all verified fixed except the deliberately-skipped
+unreachable `engine.ts` recursion (UI-gated dead path, over-engineering to
+fix):
+- Terminal statuses persisted: `TaskScheduler(on_terminal=…)` writes
+  cancelled/failed/timeout from `_run`'s outcome branches; stop no longer
+  leaves tasks stuck `running` (`TASK_FAILED` now also mapped to a
+  `task.failed` stream event).
+- Semantic impact: completed/preserved tasks with changed reads become
+  `stale`; the runtime archives both statuses (no blanket `continue`).
+- No-change interruptions return `{action: "noop"}` (plus a recorded false
+  interruption) — same guard as fresh messages; the UI shows no
+  annotation, no version bump, no recovery copy.
+- `_readiness_score()` calls `interruption_scorer.compute()` with live
+  signals before every `/api/state` — Inspector readiness is non-zero
+  (observed 16% mid-run, 6% idle; was a permanent 0%).
+- Dead code/docs cleanup: `PWError` imports + `is_available` removed,
+  `Composer.tsx` deleted (`git rm`), README/21st-doc references renamed,
+  `Query(ge=1)` + WebSocket frame-size guard.
+
+Search now runs in the real browser end-to-end (`search for samsung galaxy
+s26 release date` → `browse_navigate|snapshot|extract`, plan label
+"Search the web for …", ack/answer/results heading all quote the query):
+- **Bing market pinning (found during E2E)**: a bare headless request got
+  geolocated junk SERPs ("50 results", unrelated DE/JP pages);
+  `&setmkt=en-US&setlang=en&cc=US` returns the real SERP (side-by-side
+  probe: plain → junk, pinned → "About 42,900 results" with Wikipedia /
+  TechAdvisor listings).
+- Capture settle: `wait_for_load_state("networkidle")` (5s cap) after
+  `domcontentloaded`, so captures show rendered results, not the shell.
+- `content_text()` trims leading boilerplate (skip links, ALL-CAPS nav
+  rows, Rewards/MORE/Privacy/Terms) — the answer and task summaries quote
+  content: "About 42,900 results wikipedia.org … Samsung Galaxy S26 - Wikipedia…".
+- Preview honesty via `Task.simulated`: the embedded demo keeps its site
+  window; real runs never show the mockup — mid-run they show an honest
+  "Live task / OPENING — the capture appears here the moment it renders"
+  card, then upgrade to real captures (pinned final after settle).
+
+Browser E2E (vite `:5173` + backend `:8000`, MCP Chromium, screenshots):
+- Search run: mid-run preview shows the OPENING card with live task
+  progress; settle pins the final capture (real Bing SERP pixels),
+  answer quotes real result text, results block "Search
+  'samsung galaxy s26 release date' — bing.com", 0 console errors.
+- Stop mid-run → "Stopped — 3 steps cancelled on your request; nothing
+  was captured.", every cancelled task persisted `cancelled`,
+  `running_tasks: 0`, no stuck spinners.
+- No-op interruption mid-run ("sounds good keep going please") → state
+  version unchanged (v3 → v3), no "Interruption detected" annotation, no
+  recovery message, run completes normally with the full answer.
+- Dev Mode Inspector: readiness 16% mid-run / 6% idle; constraints show
+  pinned URL + query + `bing.com` target; zero console errors in every
+  run above.

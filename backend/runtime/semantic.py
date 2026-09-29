@@ -59,10 +59,6 @@ def compute_impact_analysis(
     result: dict[str, list[str]] = {"stale": [], "preserved": [], "fenced": []}
 
     for task_id, task in tasks.items():
-        if task.get("status") in ("completed", "archived"):
-            result["preserved"].append(task_id)
-            continue
-
         reads = set(task.get("reads", []))
         semantic_scope = set(task.get("semantic_scope", []))
         relevant_fields = reads | semantic_scope
@@ -73,14 +69,12 @@ def compute_impact_analysis(
             status = task.get("status", "")
             if status == "running":
                 result["fenced"].append(task_id)
-            elif status in ("pending", "running"):
-                result["stale"].append(task_id)
             else:
+                # Completed work whose inputs changed is stale, not reused:
+                # the runtime archives it and the fresh plan recomputes it.
                 result["stale"].append(task_id)
         else:
-            if task.get("status") in ("pending", "running"):
-                result["preserved"].append(task_id)
-            elif task.get("status") == "completed":
+            if task.get("status") in ("pending", "running", "completed"):
                 result["preserved"].append(task_id)
 
     return result

@@ -24,6 +24,7 @@ class TaskScheduler:
         event_bus: EventBus,
         graph: DependencyGraph,
         max_concurrent: int = 10,
+        on_terminal: Optional[Callable[[str, dict[str, Any]], Any]] = None,
     ):
         self._event_bus = event_bus
         self._graph = graph
@@ -33,6 +34,19 @@ class TaskScheduler:
         self._cancel_tokens: dict[str, asyncio.Event] = {}
         self._task_callbacks: dict[str, Callable] = {}
         self._lock = asyncio.Lock()
+        # Persists terminal statuses (cancelled/failed) to state — the
+        # coroutine's own persistence only covers success/fencing paths, so
+        # without this an interrupted or failed task would spin forever as
+        # "running" while the scheduler reports zero running tasks.
+        self._on_terminal = on_terminal
+
+    async def _persist_terminal(self, task_id: str, fields: dict[str, Any]) -> None:
+        if self._on_terminal is None:
+            return
+        try:
+            await self._on_terminal(task_id, fields)
+        except Exception:
+            pass  # state writes must never mask the task outcome
 
     async def schedule(
         self,
@@ -42,6 +56,7 @@ class TaskScheduler:
         timeout: float = 30.0,
         run_id: str = "",
         state_version: int = 0,
+        label: str = "",
     ) -> None:
         cancel_event = asyncio.Event()
         self._cancel_tokens[task_id] = cancel_event
@@ -51,7 +66,7 @@ class TaskScheduler:
             run_id=run_id,
             state_version=state_version,
             task_id=task_id,
-            payload={"execution_class": execution_class.value, "timeout": timeout},
+            payload={"execution_class": execution_class.value, "timeout": timeout, "label": label},
         )
 
         async def _run():
@@ -66,7 +81,7 @@ class TaskScheduler:
                             run_id=run_id,
                             state_version=state_version,
                             task_id=task_id,
-                            payload={"reason": "cancel_requested"},
+                            payload={"reason": "cancel_requested", "label": label},
                         )
                         return {"status": TaskStatus.CANCELLED.value}
 
@@ -75,37 +90,51 @@ class TaskScheduler:
                         run_id=run_id,
                         state_version=state_version,
                         task_id=task_id,
-                        payload={"result": result},
+                        payload={"result": result, "label": label},
                     )
                     return {"status": TaskStatus.COMPLETED.value, "result": result}
 
                 except asyncio.TimeoutError:
+                    await self._persist_terminal(task_id, {
+                        "status": TaskStatus.FAILED.value,
+                        "failed_at": time.time(),
+                        "result": {"error": "timeout", "failure_class": FailureClass.TRANSIENT.value},
+                    })
                     self._event_bus.emit(
                         "TASK_FAILED",
                         run_id=run_id,
                         state_version=state_version,
                         task_id=task_id,
-                        payload={"error": "timeout", "failure_class": FailureClass.TRANSIENT.value},
+                        payload={"error": "timeout", "failure_class": FailureClass.TRANSIENT.value, "label": label},
                     )
                     return {"status": TaskStatus.FAILED.value, "error": "timeout"}
 
                 except asyncio.CancelledError:
+                    await self._persist_terminal(task_id, {
+                        "status": TaskStatus.CANCELLED.value,
+                        "cancelled_at": time.time(),
+                    })
                     self._event_bus.emit(
                         "TASK_CANCELLED",
                         run_id=run_id,
                         state_version=state_version,
                         task_id=task_id,
-                        payload={"reason": "asyncio_cancelled"},
+                        payload={"reason": "asyncio_cancelled", "label": label},
                     )
                     return {"status": TaskStatus.CANCELLED.value}
 
                 except Exception as e:
+                    await self._persist_terminal(task_id, {
+                        "status": TaskStatus.FAILED.value,
+                        "failed_at": time.time(),
+                        "result": {"error": str(e)[:500]},
+                    })
                     self._event_bus.emit(
                         "TASK_FAILED",
                         run_id=run_id,
                         state_version=state_version,
                         task_id=task_id,
-                        payload={"error": str(e), "failure_class": FailureClass.TOOL.value},
+                        payload={"error": str(e), "failure_class": FailureClass.TOOL.value, "label": label},
                     )
                     return {"status": TaskStatus.FAILED.value, "error": str(e)}
 

@@ -23,7 +23,7 @@ const markStatus = (task: Task): "pending" | "running" | "done" | "failed" | "ca
 
 function eventTone(type: string): string {
   if (type === "interruption.detected" || type === "execution.paused") return "bg-fence";
-  if (type === "task.invalidated") return "bg-danger";
+  if (type === "task.invalidated" || type === "task.failed") return "bg-danger";
   if (type === "task.fenced") return "bg-fence";
   if (type === "task.preserved" || type === "run.completed") return "bg-ok";
   if (type === "state.updated") return "bg-info";
@@ -41,6 +41,7 @@ function eventSummary(ev: RuntimeEvent): string {
     case "task.invalidated":
     case "task.fenced":
     case "task.preserved": return String(p.label ?? "");
+    case "task.failed": return `${p.label ?? ""} — ${p.error ?? "failed"}`;
     case "state.updated": return `v${ev.state_version} committed`;
     case "interruption.detected": return p.noop ? "no constraint delta" : "constraints amended";
     default: return "";
