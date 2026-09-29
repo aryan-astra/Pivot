@@ -27,7 +27,7 @@ const INTERRUPT_HINTS = [
   "“only on Flipkart”",
 ];
 
-export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
+export function EmptyState({ onPick, demoMode }: { onPick: (text: string) => void; demoMode: boolean }) {
   return (
     <div className="relative mx-auto flex w-full max-w-[840px] flex-col px-5 pb-28 pt-[7vh] md:px-8 md:pb-24 md:pt-[11vh]">
       {/* opening statement — left-aligned, editorial */}
@@ -55,7 +55,8 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         </p>
       </motion.div>
 
-      {/* example prompts — refined list, not cards */}
+      {/* example prompts — demo content, hidden unless the Demo toggle is on */}
+      {demoMode && (
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -103,8 +104,10 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
             </button>
           ))}
         </div>
+      </motion.div>
+      )}
 
-        {/* status vocabulary — teaches the semantic language */}
+        {/* status vocabulary — product language, always visible */}
         <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2.5">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-3">Vocabulary</span>
           {[
@@ -120,12 +123,13 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
           ))}
         </div>
 
+      {demoMode && (
         <p className="mt-8 text-[13px] leading-relaxed text-ink-3">
           While the agent works, type a new requirement — for example{" "}
           <em className="font-mono not-italic text-ink-2">{INTERRUPT_HINTS[0]}</em> — and watch the runtime
           decide what survives.
         </p>
-      </motion.div>
+      )}
     </div>
   );
 }

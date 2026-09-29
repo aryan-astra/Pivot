@@ -496,4 +496,13 @@ export const api = {
   subscribe(fn: () => void): () => void {
     return engine.subscribe(fn);
   },
+
+  /**
+   * Demo content switch for the embedded fallback (scripted picks and
+   * fabricated outputs). No-op in network mode — the backend is the system
+   * of record and carries no demo content.
+   */
+  setDemoContent(on: boolean): void {
+    engine.setDemoContent(on);
+  },
 };
