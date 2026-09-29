@@ -149,7 +149,7 @@ const POOLS: Record<string, string[]> = {
   travel: ["The Zuri Whitefields", "Taj West End", "ibis Bengaluru Tech Park", "Octave Suites", "The Leela Palace", "Sterling Kodai"],
 };
 
-function buildResults(intent: RuntimeIntent, fenced: number, reused: number): ResultsPayload {
+function buildResults(intent: RuntimeIntent, fenced: number, reused: number, demo: boolean): ResultsPayload {
   const c = intent.constraints;
   const headBits: string[] = [];
   const noun = intent.domain === "dining" ? "restaurants" : intent.domain === "travel" ? "stays" : "options";
@@ -160,6 +160,18 @@ function buildResults(intent: RuntimeIntent, fenced: number, reused: number): Re
   if (c.location) headBits.push(String(c.location));
   if (c.nights) headBits.push(`${c.nights} night${Number(c.nights) === 1 ? "" : "s"}`);
   const heading = `Shortlist — ${headBits.join(" · ")}`;
+
+  // Demo content (named picks, fabricated prices/ratings) is opt-in. With the
+  // Demo toggle off, the embedded fallback reports only what it honestly
+  // knows: the parsed constraints. Live data comes from the backend.
+  if (!demo) {
+    return {
+      heading,
+      note: "Demo content is off — enable Demo in Dev Mode for sample results, or connect the backend for live data.",
+      items: [],
+      meta: `${intent.targets.join(" · ")} · state v${"X"} applied`,
+    };
+  }
 
   const pool = POOLS[intent.domain] ?? POOLS.shopping;
   const items = pool.slice(0, 4).map((title, i) => {
@@ -223,6 +235,7 @@ class InterruptEngine {
   private phase: EnginePhase = "idle";
   private evSeq = 0;
   private taskSeq = 0;
+  private demoContent = false;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<() => void>();
@@ -250,6 +263,16 @@ class InterruptEngine {
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  /**
+   * Opt in to scripted demo content (named picks, fabricated task outputs
+   * and result numbers). Off by default: the fallback then reports only
+   * parsed constraints and honest completion lines. Applies to subsequently
+   * recorded outputs and results; history already emitted is untouched.
+   */
+  setDemoContent(on: boolean): void {
+    this.demoContent = on;
   }
 
   async message(text: string, isInterruption = false): Promise<void> {
@@ -553,7 +576,9 @@ class InterruptEngine {
       running.progress = Math.min(100, running.progress + Math.round((20 + Math.random() * 18) * fast));
       if (running.progress >= 100) {
         running.status = "completed";
-        running.output = OUTPUTS[running.operation]?.() ?? `${running.label.toLowerCase()} finished`;
+        running.output = this.demoContent
+          ? (OUTPUTS[running.operation]?.() ?? `${running.label.toLowerCase()} finished`)
+          : `${running.label.toLowerCase()} finished`;
         this.emit("task.completed", { task_id: running.task_id, label: running.label, output: running.output });
         this.notify();
       } else {
@@ -575,7 +600,7 @@ class InterruptEngine {
     const preserved = this.tasks.filter((t) => t.status === "preserved").length;
     const fenced = this.tasks.filter((t) => t.status === "fenced").length;
     const steps = this.tasks.filter((t) => ["completed", "preserved"].includes(t.status)).length;
-    const results = buildResults(this.intent!, fenced, preserved);
+    const results = buildResults(this.intent!, fenced, preserved, this.demoContent);
     results.meta = results.meta.replace("vX", `v${this.version}`);
     this.emit("assistant.message", {
       text: this.closingLine(steps, preserved),

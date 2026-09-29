@@ -20,6 +20,7 @@ import {
 } from "@/components/Stream";
 import { useRuntime } from "@/hooks/useRuntime";
 import { useSpeechDictation } from "@/hooks/useSpeechDictation";
+import { api } from "@/runtime/api";
 import type { ConstraintChange, ImpactSummary, ResultsPayload, RuntimeEvent } from "@/runtime/types";
 import { fmtValue, keyLabel } from "@/components/ui";
 import { applyTheme, getInitialTheme, getTheme, type ThemeId } from "@/theme";
@@ -80,6 +81,13 @@ export default function App() {
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 1280px)").matches);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeId>(getInitialTheme);
+  const [demoMode, setDemoMode] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem("pivot-demo") === "on";
+    } catch {
+      return false;
+    }
+  });
   const strandColors = useMemo(() => [...getTheme(theme).strands], [theme]);
   const [draftText, setDraftText] = useState("");
 
@@ -118,6 +126,17 @@ export default function App() {
   }, [reset]);
   /* Keep the selected palette in sync with CSS and local storage. */
   useEffect(() => applyTheme(theme), [theme]);
+
+  /* Demo content switch: example prompts plus the embedded fallback's
+     scripted picks. Off by default; persisted across sessions. */
+  useEffect(() => {
+    api.setDemoContent(demoMode);
+    try {
+      window.localStorage.setItem("pivot-demo", demoMode ? "on" : "off");
+    } catch {
+      // Private browsing or storage restrictions should not block the toggle.
+    }
+  }, [demoMode]);
 
   /* responsive inspector variant */
   useEffect(() => {
@@ -286,7 +305,7 @@ export default function App() {
                 className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain"
               >
                 {isEmpty ? (
-                  <EmptyState onPick={(text) => void submitMessage(text)} />
+                  <EmptyState onPick={(text) => void submitMessage(text)} demoMode={demoMode} />
                 ) : (
                   <div role="log" aria-live="polite" aria-label="Conversation and execution stream" className="mx-auto flex w-full max-w-[840px] flex-col gap-7 px-5 pb-6 pt-8 md:gap-8 md:px-8">
                     {items.map((item) => {
@@ -374,9 +393,9 @@ export default function App() {
             </main>
 
             {isDesktop ? (
-              <RuntimeInspector state={state} open={devMode} onClose={() => setDevMode(false)} variant="inline" />
+              <RuntimeInspector state={state} open={devMode} onClose={() => setDevMode(false)} variant="inline" demoMode={demoMode} onDemoChange={setDemoMode} />
             ) : (
-              <RuntimeInspector state={state} open={devMode} onClose={() => setDevMode(false)} variant="overlay" />
+              <RuntimeInspector state={state} open={devMode} onClose={() => setDevMode(false)} variant="overlay" demoMode={demoMode} onDemoChange={setDemoMode} />
             )}
           </div>
         </div>

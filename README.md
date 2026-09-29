@@ -93,6 +93,8 @@ fenced counts plus the constraint change) → recovery note → settled summary.
 - Composer: multiline prompt bar with voice dictation (browser speech
   service, permission failures surfaced inline). `/` focuses the prompt,
   `Esc` closes the inspector.
+- Example prompts and the offline fallback's scripted sample results sit
+  behind a Demo toggle in Dev Mode (off by default, remembered per browser).
 - Component roles: CallChip = tool commands, Strands = working state,
   ClickSpark = click feedback, SpringCheck = to-dos, VoicePill = audio
   prompts, ThoughtLine = agent working/settled status, StatusMark = task

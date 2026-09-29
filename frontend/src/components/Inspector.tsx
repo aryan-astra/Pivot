@@ -61,11 +61,15 @@ export function RuntimeInspector({
   open,
   onClose,
   variant,
+  demoMode,
+  onDemoChange,
 }: {
   state: RuntimeState;
   open: boolean;
   onClose: () => void;
   variant: "inline" | "overlay";
+  demoMode: boolean;
+  onDemoChange: (on: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -119,6 +123,41 @@ export function RuntimeInspector({
               {state.phase}
             </span>
           </div>
+        </Section>
+
+        {/* demo content switch */}
+        <Section label="Demo" right={<span className="font-mono text-[10.5px] text-ink-3">{demoMode ? "on" : "off"}</span>}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={demoMode}
+            aria-label="Demo content"
+            onClick={() => onDemoChange(!demoMode)}
+            className="flex w-full items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5 text-left transition-[background-color,border-color] duration-150 hover:bg-surface-2"
+          >
+            <span className="min-w-0">
+              <span className="block text-[12.5px] font-medium text-ink">Sample prompts & scripted results</span>
+              <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-3">
+                {demoMode
+                  ? "On — the workspace shows example prompts and the offline fallback fabricates picks."
+                  : "Off — clean workspace; the offline fallback reports only parsed constraints."}
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "relative h-[20px] w-[36px] shrink-0 rounded-full transition-colors duration-200",
+                demoMode ? "bg-ok" : "bg-line-2",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-[2px] h-[16px] w-[16px] rounded-full bg-surface shadow-lift transition-[left] duration-200",
+                  demoMode ? "left-[18px]" : "left-[2px]",
+                )}
+              />
+            </span>
+          </button>
         </Section>
 
         {/* constraints */}
