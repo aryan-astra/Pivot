@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X, Zap } from "lucide-react";
 import type { ConstraintChange, ImpactSummary, ResultsPayload } from "@/runtime/types";
 import { cn } from "@/utils/cn";
+import { CrossGlyph, SwirlGlyph } from "./Glyphs";
 import { fmtClock, ProductMark, SectionLabel, Tag } from "./ui";
 
 /* ————— stream item model ————— */
@@ -43,6 +44,7 @@ export function UserMessage({ text, time, interruption }: { text: string; time: 
 }
 
 export function AssistantNote({ text, time, closing }: { text: string; time: number; closing?: boolean }) {
+  const isRecovery = /recovery complete/i.test(text);
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -51,7 +53,11 @@ export function AssistantNote({ text, time, closing }: { text: string; time: num
       className="max-w-[64ch]"
     >
       <div className="flex items-center gap-2">
-        <ProductMark size={13} className="text-ink-2" />
+        {isRecovery ? (
+          <SwirlGlyph strokeWidth={14} className="h-4 w-4 text-accent" />
+        ) : (
+          <ProductMark size={13} className="text-ink-2" />
+        )}
         <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-3">
           Agent · <span className="tnum">{fmtClock(time)}</span>
         </span>
@@ -72,7 +78,7 @@ export function SystemAnnotation({ title, version, detail, time }: { title: stri
     >
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
         <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-fence">
-          <span className="h-[6px] w-[6px] rounded-[2px] bg-fence" aria-hidden="true" />
+          <CrossGlyph className="h-3 w-3 text-fence" />
           {title}
         </span>
         <span className="tnum font-mono text-[11px] text-ink-2">state v{version}</span>

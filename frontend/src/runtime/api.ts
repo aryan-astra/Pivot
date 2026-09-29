@@ -79,6 +79,13 @@ interface BackendTask {
   state_version?: number;
   dependencies?: string[];
   result?: unknown;
+  created_at?: number;
+  completed_at?: number;
+  preserved_at?: number;
+  fenced_at?: number;
+  cancelled_at?: number;
+  failed_at?: number;
+  archived_at?: number;
 }
 
 interface BackendEvent {
@@ -180,6 +187,13 @@ function impactFromAnalysis(p: Record<string, unknown>): ImpactSummary {
   };
 }
 
+function toClientTimestamp(timestamp: number): number {
+  // Backend event storage uses epoch seconds; the embedded runtime and UI use
+  // JavaScript epoch milliseconds. Accept either so both transports format the
+  // same local clock time.
+  return timestamp > 0 && timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+}
+
 function mk(
   event_id: string,
   event_type: RuntimeEventType,
@@ -187,7 +201,7 @@ function mk(
   state_version: number,
   payload: Record<string, unknown>,
 ): RuntimeEvent {
-  return { event_id, event_type, timestamp, state_version, payload };
+  return { event_id, event_type, timestamp: toClientTimestamp(timestamp), state_version, payload };
 }
 
 /**
@@ -340,9 +354,6 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
   return out;
 }
 
-/** Versions for which a synthesized closing line was already emitted. */
-const closedVersions = new Set<number>();
-
 function closingLine(steps: number, preserved: number): string {
   const base = `Done — ${steps} execution step${steps === 1 ? "" : "s"} total`;
   return preserved > 0 ? `${base}, ${preserved} preserved from the earlier state. Nothing valid was recomputed.` : `${base}.`;
@@ -352,7 +363,19 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
   const version = raw.state_version ?? 0;
   const live = Object.values(raw.tasks ?? {});
   const archived = Object.values(raw.archived_tasks ?? {}).map((t) => ({ ...t, status: "archived" }));
-  const tasks = [...live, ...archived].map((t) => normalizeTask(t, version));
+  const latestProgress = new Map<string, number>();
+  for (const event of rawEvents) {
+    if (event.event_type !== "TASK_PROGRESS" || !event.task_id) continue;
+    const value = Number(event.payload?.progress);
+    if (Number.isFinite(value)) latestProgress.set(event.task_id, Math.round(Math.min(1, Math.max(0, value)) * 100));
+  }
+  const tasks = [...live, ...archived].map((task) => {
+    const normalized = normalizeTask(task, version);
+    if (normalized.status === "running" && latestProgress.has(normalized.task_id)) {
+      normalized.progress = latestProgress.get(normalized.task_id)!;
+    }
+    return normalized;
+  });
 
   const intent: RuntimeIntent | null = raw.intent
     ? {
@@ -365,9 +388,12 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
 
   const events = translateEvents(rawEvents);
 
-  // Synthesize one closing line per fully-settled version, derived from real
-  // task state (never fabricated result items).
+  // Synthesize a stable closing line for each fully settled version from real
+  // task state (never fabricated result items). Keep the synthetic event id and
+  // timestamp stable across polls so the UI's append-only stream never rewinds.
   const running = raw.running_tasks ?? tasks.filter((t) => t.status === "running").length;
+  const hasPending = tasks.some((task) => task.status === "pending");
+  const rawTaskById = new Map([...live, ...archived].map((task) => [task.task_id, task]));
   const byVersion = new Map<number, Task[]>();
   for (const t of tasks) {
     const list = byVersion.get(t.created_in) ?? [];
@@ -375,15 +401,27 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
     byVersion.set(t.created_in, list);
   }
   for (const [v, list] of byVersion) {
-    if (closedVersions.has(v) || list.length === 0) continue;
+    if (list.length === 0) continue;
     const settled = list.every((t) => TERMINAL.has(t.status));
     if (!settled) continue;
     if (v === version && running > 0) continue;
     const steps = list.filter((t) => t.status === "completed" || t.status === "preserved").length;
     const preserved = list.filter((t) => t.status === "preserved").length;
-    closedVersions.add(v);
+    const closedAt = Math.max(
+      0,
+      ...list.map((task) => {
+        const source = rawTaskById.get(task.task_id);
+        if (!source) return 0;
+        if (task.status === "fenced") return source.fenced_at ?? source.completed_at ?? source.created_at ?? 0;
+        if (task.status === "preserved") return source.preserved_at ?? source.completed_at ?? source.created_at ?? 0;
+        if (task.status === "cancelled") return source.cancelled_at ?? source.completed_at ?? source.created_at ?? 0;
+        if (task.status === "failed") return source.failed_at ?? source.completed_at ?? source.created_at ?? 0;
+        if (task.status === "archived") return source.archived_at ?? source.completed_at ?? source.created_at ?? 0;
+        return source.completed_at ?? source.created_at ?? 0;
+      }),
+    );
     events.push(
-      mk(`syn-close-v${v}`, "assistant.message", Date.now(), v, { text: closingLine(steps, preserved), closing: true }),
+      mk(`syn-close-v${v}`, "assistant.message", closedAt + 0.001, v, { text: closingLine(steps, preserved), closing: true }),
     );
   }
   events.sort((a, b) => a.timestamp - b.timestamp);
@@ -395,7 +433,7 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
     events,
     running_tasks: running,
     interruption_score: Math.round((raw.interruption_score ?? 0) * 100),
-    phase: running > 0 ? "running" : version > 0 ? "complete" : "idle",
+    phase: running > 0 || hasPending ? "running" : version > 0 ? "complete" : "idle",
   };
 }
 
@@ -449,7 +487,6 @@ export const api = {
     const m = await ensureMode();
     if (m === "network") {
       await net("/api/reset", { method: "POST" });
-      closedVersions.clear();
       return;
     }
     await engine.reset();

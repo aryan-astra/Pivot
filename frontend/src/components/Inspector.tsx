@@ -1,9 +1,25 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, X } from "lucide-react";
-import type { RuntimeEvent, RuntimeState } from "@/runtime/types";
+import type { RuntimeEvent, RuntimeState, Task } from "@/runtime/types";
 import { cn } from "@/utils/cn";
-import { fmtClockFull, fmtValue, keyLabel, SectionLabel, spring, StateChip, StatusGlyph, STATUS_META } from "./ui";
+import CallChip from "./CallChip";
+import StatusMark from "./StatusMark";
+import { fmtClockFull, fmtValue, keyLabel, SectionLabel, spring, StateChip, STATUS_META } from "./ui";
+
+const toolStatus = (task: Task): "idle" | "running" | "done" | "error" => {
+  if (task.status === "pending") return "idle";
+  if (task.status === "running") return "running";
+  if (task.status === "failed") return "error";
+  return "done";
+};
+const markStatus = (task: Task): "pending" | "running" | "done" | "failed" | "cancelled" => {
+  if (task.status === "running") return "running";
+  if (task.status === "completed" || task.status === "preserved") return "done";
+  if (task.status === "failed") return "failed";
+  if (task.status === "pending") return "pending";
+  return "cancelled";
+};
 
 function eventTone(type: string): string {
   if (type === "interruption.detected" || type === "execution.paused") return "bg-fence";
@@ -169,8 +185,8 @@ export function RuntimeInspector({
               <li key={t.task_id} className="relative py-[5px] pl-6">
                 {i > 0 && <span className="absolute left-[5px] top-0 h-[calc(50%-5px)] w-px bg-line" aria-hidden="true" />}
                 {i < visibleTasks.length - 1 && <span className="absolute bottom-0 left-[5px] top-[calc(50%+5px)] w-px bg-line" aria-hidden="true" />}
-                <span className="absolute left-0 top-1/2 -translate-y-1/2">
-                  <StatusGlyph status={t.status} animate={false} />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 bg-surface">
+                  <StatusMark status={markStatus(t)} progress={t.status === "running" ? t.progress / 100 : undefined} size={15} strokeWidth={2} color="var(--color-ink-2)" doneColor="var(--color-ok)" errorColor="var(--color-danger)" strike={false} ariaLabel={`${t.label}: ${STATUS_META[t.status].word}`} />
                 </span>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className={cn("truncate text-[12.5px] font-medium", t.status === "invalidated" || t.status === "archived" ? "text-ink-3" : "text-ink")}>
@@ -182,9 +198,27 @@ export function RuntimeInspector({
                 </div>
                 <div className="mt-[1px] truncate font-mono text-[10px] text-ink-3">
                   <span className="tnum">{t.task_id}</span>
-                  {t.depends_on && <span> ← {t.depends_on}</span>}
+                  {t.depends_on && <span> · depends on {t.depends_on}</span>}
                   {t.reads.length > 0 && <span> · reads {t.reads.join(", ")}</span>}
                   <span> · v{t.created_in}</span>
+                </div>
+                <div className="mt-1.5 max-w-full">
+                  <CallChip
+                    icon={/search|browser/i.test(t.operation) ? "search" : /parse|result|file/i.test(t.operation) ? "file" : "terminal"}
+                    name={t.operation.slice(0, 18)}
+                    argument={t.label}
+                    status={toolStatus(t)}
+                    expectedMs={8000}
+                    size={25}
+                    radius={7}
+                    color="var(--color-tool-ink)"
+                    surfaceColor="var(--color-tool-surface)"
+                    progressColor="var(--color-accent)"
+                    doneColor="var(--color-ok)"
+                    errorColor="var(--color-danger)"
+                    showTimer={t.status === "running"}
+                    className="max-w-full"
+                  />
                 </div>
               </li>
             ))}

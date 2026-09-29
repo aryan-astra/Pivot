@@ -1,9 +1,9 @@
 /*
- * Decorative vector marks ported from Framer Marketplace components
- * ("Home", "Shape 1" ×2, "Vector"). Re-expressed as plain SVG so PIVOT does
- * not need the `framer` runtime — geometry is unchanged, colour comes from
- * `currentColor` so the marks follow PIVOT's ink/paper tokens.
- * All marks are decorative: aria-hidden, no interaction.
+ * Vector marks adapted from the supplied Framer components ("Home", "Shape 1"
+ * ×2, "Vector"). Re-expressed as plain SVG so PIVOT does not need the `framer`
+ * runtime; geometry is unchanged and currentColor follows the theme. Each mark
+ * sits beside its matching workspace label or stream event; all are decorative
+ * to assistive technology and non-interactive.
  */
 
 type GlyphProps = { className?: string };

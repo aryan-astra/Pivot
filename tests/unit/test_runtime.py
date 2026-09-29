@@ -501,6 +501,7 @@ class TestScheduler:
         await asyncio.sleep(0.1)
         # Not all should have started yet due to semaphore
         assert len(started) <= 5
+        await scheduler.cancel_all("test_cleanup")
 
 
 class TestEndToEndInterruption:
