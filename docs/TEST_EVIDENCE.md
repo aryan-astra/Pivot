@@ -250,3 +250,33 @@ Verified on this pass:
 - Suite: 78 passed (63 + 15 new browser tests); `tsc --noEmit` clean;
   `vite build` clean (one transient rollup worker flake, clean on rerun);
   `npm audit` 0 vulnerabilities (frontend + video).
+
+## Floating preview window pass (2026-09-29)
+
+- The browser preview moved out of the execution list into
+  `FloatingPreview`: a fixed viewport layer (`z-30`, pointer-transparent)
+  holding one draggable card near the bottom-left, clear of the composer
+  (31px gap measured at 1062x670). The execution section is a single stable
+  column again — no reflow as steps turn over.
+- Timed in-page samples across a live `go to instagram.com` run (card
+  present at every tick, same rect left=24/bottom=526): t=1.0s running step
+  with `demo` badge (activity card, no fabricated image), t=2.6s still
+  running, t=4.2s `final` badge + real capture image, t=6.8s pinned after
+  settle. The window never disappears between steps or at completion.
+- Minimize toggle: one click shrinks 323px -> 63px header pill (image
+  hidden, label swaps to "Expand the floating preview"), second click
+  restores; a new state version re-opens a minimized window.
+- Real-pointer drag (MCP browser drag from the card header to the Dev Mode
+  button): `translateX(714px) translateY(-202px)`, landed fully on-screen
+  (constraints held against the 1062x670 viewport), collapse still wired
+  afterwards. Synthetic pointer events do not engage framer-motion's
+  gesture — verified with browser-driven input instead.
+- Selection priority unchanged and verified: live search site window ->
+  newest real capture (during the run and pinned as final) -> running task
+  activity card while live -> nothing for non-browser runs. Answer copy
+  now reads "The final capture stays visible in the floating preview."
+  and the results note "Final capture floating in the preview".
+- Console clean (only the React DevTools info line); zero errors during
+  run, collapse, and drag.
+- Suite: 78 passed; `tsc --noEmit` clean; `vite build` clean (one transient
+  rollup failure on first run, clean on rerun).

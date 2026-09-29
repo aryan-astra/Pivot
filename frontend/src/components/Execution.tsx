@@ -6,7 +6,6 @@ import SpringCheck from "./SpringCheck";
 import StatusMark from "./StatusMark";
 import ThoughtLine from "./ThoughtLine";
 import Strands from "./Strands";
-import { LiveTaskPreview } from "./LiveTaskPreview";
 import { SectionLabel, StateChip, STATUS_META, Tag } from "./ui";
 
 function toolStatus(task: Task): "idle" | "running" | "done" | "error" {
@@ -33,10 +32,6 @@ function toolIcon(operation: string): "terminal" | "file" | "search" | "edit" {
 
 function toolName(operation: string): string {
   return operation.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 20) || "agent";
-}
-
-function isBrowserSearchTask(task: Task): boolean {
-  return /search|browser/i.test(`${task.operation} ${task.label}`);
 }
 
 function ExecutionTask({ task, index, isLast }: { task: Task; index: number; isLast: boolean }) {
@@ -137,7 +132,6 @@ export function ExecutionSection({
   currentVersion,
   swept,
   strandColors,
-  requestText,
 }: {
   version: number;
   tasks: Task[];
@@ -145,23 +139,12 @@ export function ExecutionSection({
   currentVersion: number;
   swept: boolean;
   strandColors: string[];
-  requestText: string;
 }) {
   const done = tasks.filter((task) => ["completed", "preserved", "fenced", "archived"].includes(task.status)).length;
   const reduceMotion = useReducedMotion();
   const isLive = version === currentVersion && (phase === "running" || phase === "planning" || phase === "interrupting");
   const paused = isLive && phase === "interrupting";
   const activeTasks = tasks.filter((task) => task.status === "running").map((task) => task.label);
-  // Preview priority: (1) a live search task keeps its inline site window;
-  // (2) the newest real browser capture — shown while the rest of the run
-  // continues AND pinned after the run settles, so the user always sees what
-  // the agent actually opened; (3) otherwise any running/pending task falls
-  // back to the honest activity card while live.
-  const runningTask = tasks.find((task) => task.status === "running") ?? tasks.find((task) => task.status === "pending");
-  const siteWindowTask = isLive && runningTask && isBrowserSearchTask(runningTask) ? runningTask : undefined;
-  const pinnedCapture = version === currentVersion ? [...tasks].reverse().find((task) => task.screenshot) : undefined;
-  const previewTask = siteWindowTask ?? pinnedCapture ?? (isLive ? runningTask : undefined);
-  const previewSettled = !siteWindowTask && Boolean(pinnedCapture) && previewTask === pinnedCapture && !isLive;
 
   if (tasks.length === 0) return null;
 
@@ -214,16 +197,15 @@ export function ExecutionSection({
         />
       </div>
 
-      <div className={cn("mt-2.5 grid items-start gap-3", previewTask && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
+      {/* The browser preview floats above the page (see FloatingPreview) —
+          this list stays a single stable column as steps turn over. */}
+      <div className="mt-2.5">
         <div className="relative min-w-0 overflow-hidden rounded-xl border border-line bg-surface">
           {swept && <span className="sweep-line z-10" aria-hidden="true" />}
           <ul className="divide-y divide-line/80 px-1.5 py-1 sm:px-2">
             {tasks.map((task, index) => <ExecutionTask key={task.task_id} task={task} index={index} isLast={index === tasks.length - 1} />)}
           </ul>
         </div>
-        {previewTask ? (
-          <LiveTaskPreview task={previewTask} requestText={requestText} siteWindow={Boolean(siteWindowTask)} settled={previewSettled} />
-        ) : null}
       </div>
     </section>
   );
