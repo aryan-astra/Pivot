@@ -126,22 +126,23 @@ export function RuntimeInspector({
         </Section>
 
         {/* demo content switch */}
-        <Section label="Demo" right={<span className="font-mono text-[10.5px] text-ink-3">{demoMode ? "on" : "off"}</span>}>
+        <Section label="Demo">
           <button
             type="button"
             role="switch"
             aria-checked={demoMode}
-            aria-label="Demo content"
+            aria-label="Demo"
             onClick={() => onDemoChange(!demoMode)}
             className="flex w-full items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5 text-left transition-[background-color,border-color] duration-150 hover:bg-surface-2"
           >
-            <span className="min-w-0">
-              <span className="block text-[12.5px] font-medium text-ink">Sample prompts & scripted results</span>
-              <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-3">
-                {demoMode
-                  ? "On — the workspace shows example prompts and the offline fallback fabricates picks."
-                  : "Off — clean workspace; the offline fallback reports only parsed constraints."}
-              </span>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors duration-200",
+                demoMode ? "border-dark bg-dark text-dark-text" : "border-line-2 text-ink-3",
+              )}
+            >
+              Demo
             </span>
             <span
               aria-hidden="true"
