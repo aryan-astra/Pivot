@@ -113,7 +113,7 @@ Tested via HTTP against running server:
 - ✅ .env in .gitignore
 - ✅ No hardcoded credentials
 - ✅ Path traversal protection in filesystem tools
-- ✅ Domain allowlisting in browser executor
+- ✅ Browser executor: http/https scheme gate only, no domain allowlist (live-verified below)
 - ✅ WebSocket message validation
 
 ## Performance Measurements
@@ -129,7 +129,8 @@ Tested via HTTP against running server:
 
 ## Known Limitations
 
-- Browser automation not tested against real websites (anti-bot)
+- Browser automation now tested against real websites (example.com,
+  example.org, en.wikipedia.org/wiki/India) with real local Chromium.
 - WebSocket load testing not performed
 - Visual QA not automated
 
@@ -182,8 +183,7 @@ Bugs found and fixed during consolidation (all verified by re-test):
   marked `preserved` (new `TASK_PRESERVED` event) instead of staying
   indistinguishable `completed`; frontend maps the event for the inspector.
 - Security: fixed static-server path traversal (`/{full_path}` is now contained
-  in `frontend/dist`; `..` escapes return 404, verified); `BrowserExecutor`
-  allowlist is now default-deny (module has no runtime callers); no
+  in `frontend/dist`; `..` escapes return 404, verified); no
   `dangerouslySetInnerHTML`/`eval` in frontend; no secrets in tree or bundle;
   `.env`/`data/*.db*`/`node_modules`/`dist` ignored and uncommitted.
 - Viewports (1440/768/~500px, production build): no page-level horizontal
@@ -227,3 +227,26 @@ Verified on this pass:
   of history; it scrolled to `scrollTop: 2,664`.
 - Layout at 390px and 1440px: no horizontal overflow; semantic glyphs stay with
   their labels; the field is `pointer-events-none` so clicks pass through.
+
+## Live browser execution pass (2026-09-29)
+
+- `go to example.com` plans 3 chained tasks (`browse_navigate` →
+  `browse_snapshot` → `browse_extract`, INTERRUPTIBLE, `reads: ["url"]`) via
+  `register_tool` handlers on a shared Chromium session (one context per
+  task, strict close order, 12s/5s/8s timeouts, cooperative cancellation).
+  No domain allowlist; http/https/data scheme gate only.
+- Real captures verified server-side: 22 KB JPEG data URIs, title
+  `Example Domain`, extracted body text; wikipedia run: 153 KB captures,
+  `India - Wikipedia` title + snippet. `/api/state` with 6 screenshots =
+  141,557 bytes (localhost polling only).
+- Interrupting mid-browse (`wait, go to example.org instead`) recovers to v2
+  with `url`+`targets` changed, v1 preserved, no hang; v2 tasks capture the
+  new domain. No external API calls in any test (Chromium + `data:` URLs in
+  unit tests; user-driven site loads only).
+- UI: preview follows any live task; real pixels render with a `live` badge
+  (`Live capture from the running browser`), mocks keep `demo` + simulation
+  disclosure; finished browse cards show title/snippet outputs. Inspector
+  timeline + graph verified with browse ops. Zero console errors.
+- Suite: 78 passed (63 + 15 new browser tests); `tsc --noEmit` clean;
+  `vite build` clean (one transient rollup worker flake, clean on rerun);
+  `npm audit` 0 vulnerabilities (frontend + video).

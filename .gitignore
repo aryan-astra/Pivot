@@ -31,3 +31,14 @@ docs/ORIGINAL_README.md
 Frontend-option1/
 Frontend-option2/
 workspace-*/
+
+# Local-only tooling and artifacts — never committed.
+.agents/
+skills-lock.json
+.playwright-mcp/
+pivot-*.png
+
+# Video production workspace — entirely local until the final cut is approved.
+# Nothing under video/ (source, configs, docs, node_modules, render output)
+# enters the repo yet; drop this line when the video is ready to land.
+video/

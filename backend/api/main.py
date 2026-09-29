@@ -27,6 +27,7 @@ from runtime.runtime import Runtime
 from runtime.types import IntentState, gen_id
 from runtime.events import RuntimeEvent
 from providers.deterministic import DeterministicIntentParser
+from browser.executor import BrowserSession, make_browse_handlers
 
 
 def _resolve_db_path() -> str:
@@ -47,18 +48,35 @@ def _cors_origins() -> list[str]:
 
 # Global runtime instance
 _runtime: Optional[Runtime] = None
+_browser_session: Optional[BrowserSession] = None
+
+
+def _register_browse_tools(runtime: Runtime) -> None:
+    # Live browser tools: real local Chromium, lazy-started on first browse
+    # task. No domain allowlist; simulated fallback when Playwright is absent.
+    # Called on startup AND after every reset: reset builds a fresh Runtime
+    # with an empty tool registry, so registration must be re-applied.
+    if _browser_session is None:
+        return
+    for operation, handler in make_browse_handlers(_browser_session).items():
+        runtime.register_tool(operation, handler)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _runtime
+    global _runtime, _browser_session
     db_path = _resolve_db_path()
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     _runtime = Runtime(db_path=db_path)
+    _browser_session = BrowserSession()
+    _register_browse_tools(_runtime)
     await _runtime.start()
     yield
     if _runtime:
         await _runtime.stop()
+    if _browser_session:
+        await _browser_session.close()
+        _browser_session = None
 
 
 app = FastAPI(
@@ -194,6 +212,7 @@ async def reset_runtime():
         except OSError:
             pass
     _runtime = Runtime(db_path=db_path)
+    _register_browse_tools(_runtime)
     await _runtime.start()
     return {"status": "reset"}
 
