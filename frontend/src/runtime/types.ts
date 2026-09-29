@@ -24,6 +24,8 @@ export interface Task {
   depends_on: string | null;
   progress: number;
   output?: string;
+  /** live capture from the running browser (data URI); absent = simulated */
+  screenshot?: string;
   /** created by a re-plan after an interruption */
   late?: boolean;
 }

@@ -183,6 +183,35 @@ class DeterministicSearchProvider(SearchProvider):
 class DeterministicIntentParser:
     """Parse user modifications deterministically."""
 
+    URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+    BARE_DOMAIN_RE = re.compile(
+        r"\b((?:[a-z0-9-]+\.)+(?:com|org|net|io|in|co|dev|app|ai|edu|gov|info|me)(?:/[^\s'\"<>]*)?)",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def extract_url(text: str) -> Optional[str]:
+        """First URL in text, normalized with a scheme. None when absent."""
+        m = DeterministicIntentParser.URL_RE.search(text)
+        if m:
+            return m.group(0).rstrip(".,;!?)")
+        m = DeterministicIntentParser.BARE_DOMAIN_RE.search(text)
+        if m:
+            return "https://" + m.group(1).rstrip(".,;!?)")
+        return None
+
+    @staticmethod
+    def url_host(url: str) -> str:
+        try:
+            from urllib.parse import urlsplit
+
+            host = urlsplit(url).netloc.lower() or url
+        except Exception:
+            host = url
+        if host.startswith("www."):
+            host = host[4:]
+        return host
+
     # Parameter extraction patterns
     RAM_PATTERNS = [
         r"(\d+)\s*gb\s*(?:ram|memory)",
@@ -235,6 +264,14 @@ class DeterministicIntentParser:
         )
 
         text_lower = transcript.lower()
+
+        # URL change ("now go to example.com") — re-targets browse work.
+        url = self.extract_url(transcript)
+        if url is not None and new_intent.constraints.get("url") != url:
+            new_intent.constraints["url"] = url
+            new_intent.domain = "browse"
+            new_intent.targets = [self.url_host(url)]
+            return new_intent
 
         # Extract RAM changes
         for pattern in self.RAM_PATTERNS:
@@ -297,6 +334,15 @@ class DeterministicIntentParser:
 
         intent = IntentState(raw_text=text)
         text_lower = text.lower()
+
+        # URL-first: "go to example.com" is browse work, not shopping/travel.
+        url = self.extract_url(text)
+        if url is not None:
+            intent.domain = "browse"
+            intent.objective = "browse"
+            intent.constraints["url"] = url
+            intent.targets = [self.url_host(url)]
+            return intent
 
         # Detect domain
         for domain, keywords in self.DOMAIN_KEYWORDS.items():

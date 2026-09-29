@@ -309,6 +309,7 @@ class Runtime:
                 "status": TaskStatus.PENDING.value,
                 "execution_class": task_def.get("execution_class", ExecutionClass.INTERRUPTIBLE.value),
                 "label": task_def.get("label", task_def["operation"]),
+                "metadata": task_def.get("metadata", {}),
                 "created_at": time.time(),
             }
             await self.state.register_task(task_data)
@@ -401,6 +402,44 @@ class Runtime:
                     "execution_class": ExecutionClass.INTERRUPTIBLE.value,
                     "dependencies": [],
                 })
+
+        elif intent.domain == "browse":
+            # Live browser work: open the URL, capture the page, read content.
+            # Each step is self-contained (fresh browser context) so tasks stay
+            # independently cancellable and re-runnable.
+            url = str(intent.constraints.get("url", ""))
+            host = (intent.targets or ["web"])[0]
+            nav_id = gen_id("task_")
+            snap_id = gen_id("task_")
+            ext_id = gen_id("task_")
+            browse_meta = {"url": url}
+            plan.append({
+                "task_id": nav_id,
+                "operation": "browse_navigate",
+                "label": f"Open {host}",
+                "reads": ["url"],
+                "execution_class": ExecutionClass.INTERRUPTIBLE.value,
+                "dependencies": [],
+                "metadata": browse_meta,
+            })
+            plan.append({
+                "task_id": snap_id,
+                "operation": "browse_snapshot",
+                "label": "Capture page",
+                "reads": ["url"],
+                "execution_class": ExecutionClass.INTERRUPTIBLE.value,
+                "dependencies": [nav_id],
+                "metadata": browse_meta,
+            })
+            plan.append({
+                "task_id": ext_id,
+                "operation": "browse_extract",
+                "label": "Read page content",
+                "reads": ["url"],
+                "execution_class": ExecutionClass.INTERRUPTIBLE.value,
+                "dependencies": [snap_id],
+                "metadata": browse_meta,
+            })
 
         else:
             # Generic plan

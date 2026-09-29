@@ -19,17 +19,41 @@ function siteForTask(task: Task) {
 
 /**
  * Live preview beside the execution list. Search tasks get the inline site
- * window; every other live task gets an honest activity card instead — never
- * a fabricated site. Both variants disclose the local simulation.
+ * window; every other task gets the honest activity card instead — never a
+ * fabricated site. Real browser captures render as images (during the run and
+ * pinned after it settles); tasks without captures disclose the local
+ * simulation.
  */
-export function LiveTaskPreview({ task, requestText, siteWindow }: { task: Task; requestText: string; siteWindow: boolean }) {
+export function LiveTaskPreview({
+  task,
+  requestText,
+  siteWindow,
+  settled = false,
+}: {
+  task: Task;
+  requestText: string;
+  siteWindow: boolean;
+  settled?: boolean;
+}) {
   const progress = Math.max(0, Math.min(100, task.progress));
-  const active = task.status === "running";
+  const statusLine =
+    task.status === "running"
+      ? "Running"
+      : task.status === "pending"
+        ? "Queued"
+        : task.status === "failed"
+          ? "Failed"
+          : settled
+            ? "Pinned · run finished"
+            : task.status === "preserved"
+              ? "Preserved"
+              : "Captured";
 
   if (!siteWindow) {
+    const live = Boolean(task.screenshot);
     return (
       <section
-        aria-label={`${task.label} live task preview`}
+        aria-label={`${task.label} ${settled ? "final capture" : "live task"} preview`}
         className="min-w-0 rounded-xl border border-line bg-surface p-2.5 shadow-lift sm:p-3"
       >
         <div className="mb-2 flex min-w-0 items-center gap-2">
@@ -38,13 +62,29 @@ export function LiveTaskPreview({ task, requestText, siteWindow }: { task: Task;
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-[11.5px] font-semibold text-ink">Live task</span>
-              <span className="shrink-0 rounded-full border border-fence/30 bg-fence/5 px-1.5 py-[1px] font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-fence">demo</span>
+              <span className="truncate text-[11.5px] font-semibold text-ink">{settled ? "Final capture" : "Live task"}</span>
+              <span
+                className={
+                  live
+                    ? settled
+                      ? "shrink-0 rounded-full border border-ok/30 bg-ok/5 px-1.5 py-[1px] font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-ok"
+                      : "shrink-0 rounded-full border border-fence/30 bg-fence/5 px-1.5 py-[1px] font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-fence"
+                    : "shrink-0 rounded-full border border-fence/30 bg-fence/5 px-1.5 py-[1px] font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-fence"
+                }
+              >
+                {live ? (settled ? "final" : "live") : "demo"}
+              </span>
             </div>
-            <p className="truncate font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">{active ? "Running" : "Queued"}</p>
+            <p className="truncate font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">{statusLine}</p>
           </div>
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${settled ? "bg-ok" : "bg-accent"}`} aria-hidden="true" />
         </div>
+
+        {live ? (
+          <div className="mb-2 overflow-hidden rounded-lg border border-line-2 bg-browser-window">
+            <img src={task.screenshot} alt={`Browser capture for ${task.label}`} className="block aspect-[8/5] w-full object-cover" />
+          </div>
+        ) : null}
 
         <p className="truncate text-[12px] font-medium text-ink" title={task.label}>{task.label}</p>
         <p className="tnum mt-0.5 truncate font-mono text-[9.5px] text-ink-3">{task.operation} · {task.task_id}</p>
@@ -57,7 +97,11 @@ export function LiveTaskPreview({ task, requestText, siteWindow }: { task: Task;
 
         <p className="mt-2 flex items-start gap-1.5 text-[9px] leading-relaxed text-ink-3">
           <ShieldCheck size={11} className="mt-px shrink-0 text-ok" aria-hidden="true" />
-          <span>This is a local simulation; no live site content is loaded.</span>
+          {live
+            ? settled
+              ? <span>What the agent saw when it finished — real pixels from the local browser.</span>
+              : <span>Live capture from the running browser.</span>
+            : <span>This is a local simulation; no live site content is loaded.</span>}
         </p>
       </section>
     );

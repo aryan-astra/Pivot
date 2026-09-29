@@ -79,6 +79,8 @@ interface BackendTask {
   state_version?: number;
   dependencies?: string[];
   result?: unknown;
+  /** plan metadata (e.g. the URL a browse version targets) — per-version truth */
+  metadata?: Record<string, unknown>;
   created_at?: number;
   completed_at?: number;
   preserved_at?: number;
@@ -148,6 +150,10 @@ const TERMINAL: ReadonlySet<string> = new Set([
 
 function normalizeTask(t: BackendTask, fallbackVersion: number): Task {
   const status = mapStatus(t.status);
+  const result = (t.result ?? {}) as Record<string, unknown>;
+  const screenshot = typeof result.screenshot === "string" && result.screenshot.startsWith("data:image/")
+    ? (result.screenshot as string)
+    : undefined;
   return {
     task_id: t.task_id,
     operation: t.operation ?? "unknown",
@@ -158,7 +164,13 @@ function normalizeTask(t: BackendTask, fallbackVersion: number): Task {
     created_in: typeof t.state_version === "number" ? t.state_version : fallbackVersion,
     depends_on: t.dependencies?.[0] ?? null,
     progress: t.status === "running" ? 50 : TERMINAL.has(String(t.status)) ? 100 : 0,
-    output: typeof t.result === "string" ? t.result : undefined,
+    output:
+      typeof t.result === "string"
+        ? t.result
+        : typeof result.summary === "string"
+          ? result.summary
+          : undefined,
+    screenshot,
     late: false,
   };
 }
@@ -333,12 +345,14 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
         const version = ev.state_version;
         const impact = impactFromAnalysis((p.impact ?? p) as Record<string, unknown>);
         const total = impact.preserved + impact.invalidated + impact.fenced;
+        const planned = Array.isArray(p.planned_tasks) ? p.planned_tasks.length : 0;
+        const plannedBit = planned > 0 ? ` ${planned} step${planned === 1 ? "" : "s"} re-planned and running.` : "";
         out.push(
           mk(ev.event_id, "assistant.message", ev.timestamp, version, {
             text:
               total > 0
-                ? `Recovery complete — state v${version}: ${impact.preserved} preserved, ${impact.invalidated} invalidated, ${impact.fenced} fenced. Continuing with what survived.`
-                : `Recovery complete — state v${version}. Continuing.`,
+                ? `Recovery complete — state v${version}: ${impact.preserved} preserved, ${impact.invalidated} invalidated, ${impact.fenced} fenced.${plannedBit} Continuing with what survived.`
+                : `Recovery complete — state v${version}.${plannedBit} Continuing with what survived.`,
             closing: false,
           }),
         );
@@ -354,9 +368,237 @@ function translateEvents(raw: BackendEvent[]): RuntimeEvent[] {
   return out;
 }
 
-function closingLine(steps: number, preserved: number): string {
-  const base = `Done — ${steps} execution step${steps === 1 ? "" : "s"} total`;
-  return preserved > 0 ? `${base}, ${preserved} preserved from the earlier state. Nothing valid was recomputed.` : `${base}.`;
+/* ————— meaningful agent responses, built from real task results —————
+ *
+ * The backend returns task results (page titles, extracted text, screenshots,
+ * simulated flags) but no prose. The agent's reply is composed here from that
+ * data — never fabricated: if a run only simulated, the reply says so. */
+
+interface TaskResult {
+  url?: string;
+  title?: string;
+  text?: string;
+  summary?: string;
+  screenshot?: string;
+  simulated?: boolean;
+  error?: string;
+}
+
+function resultOf(raw: BackendTask | undefined): TaskResult {
+  const value = raw?.result;
+  return value && typeof value === "object" ? (value as TaskResult) : {};
+}
+
+function excerpt(text: string, max = 320): string {
+  const clean = String(text).replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
+function isBrowseList(list: Task[]): boolean {
+  return list.some((task) => task.operation.startsWith("browse_"));
+}
+
+function hostFromUrl(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return rawUrl;
+  }
+}
+
+/**
+ * The URL this version actually targeted — read from the version's own task
+ * metadata (never the current intent, which an interruption may already have
+ * re-pointed elsewhere).
+ */
+function browseTarget(
+  list: Task[],
+  rawById: Map<string, BackendTask>,
+): { host: string; url: string } | null {
+  for (const task of list) {
+    if (!task.operation.startsWith("browse_")) continue;
+    const meta = rawById.get(task.task_id)?.metadata;
+    const metaUrl = typeof meta?.url === "string" ? meta.url : "";
+    if (metaUrl) return { host: hostFromUrl(metaUrl), url: metaUrl };
+    const resultUrl = resultOf(rawById.get(task.task_id)).url;
+    if (resultUrl) return { host: hostFromUrl(resultUrl), url: resultUrl };
+  }
+  return null;
+}
+
+/**
+ * Which request created each state version: the last USER_INPUT or
+ * INTERRUPTION_DETECTED transcript, attached to the next version that gets
+ * tasks. Used so replies about an older version quote THAT run's request.
+ */
+function requestTextByVersion(rawEvents: BackendEvent[]): Map<number, string> {
+  const out = new Map<number, string>();
+  let pending = "";
+  for (const ev of rawEvents) {
+    if (ev.event_type === "USER_INPUT") pending = String(ev.payload?.raw_text ?? "");
+    else if (ev.event_type === "INTERRUPTION_DETECTED") pending = String(ev.payload?.transcript ?? "");
+    else if (ev.event_type === "TASK_CREATED" && pending && !out.has(ev.state_version)) {
+      out.set(ev.state_version, pending);
+      pending = "";
+    }
+  }
+  return out;
+}
+
+function constraintBits(c: Record<string, string | number>): string[] {
+  const bits: string[] = [];
+  if (c.category) bits.push(String(c.category).toLowerCase());
+  if (c.max_price) bits.push(`under ₹${Number(c.max_price).toLocaleString("en-IN")}`);
+  if (c.budget) bits.push(`under ₹${Number(c.budget).toLocaleString("en-IN")}`);
+  if (c.ram) bits.push(`${c.ram} RAM`);
+  if (c.location) bits.push(`in ${c.location}`);
+  if (c.nights) bits.push(`${Number(c.nights) === 1 ? "1 night" : `${c.nights} nights`}`);
+  return bits;
+}
+
+/**
+ * Acknowledge a run the way the embedded engine does. Built from per-version
+ * evidence (the targeted URL, the request that created the version) so an
+ * acknowledgement synthesized after an interruption never re-describes an
+ * older run with the new intent.
+ */
+function ackLine(
+  target: { host: string } | null,
+  isCurrent: boolean,
+  intent: RuntimeIntent | null,
+  requestText: string,
+): string {
+  if (target) {
+    return `Opening ${target.host} in a local browser — I'll capture the page, read what's on it, and pin the screenshot. Interrupt me mid-run and I'll re-target.`;
+  }
+  if (isCurrent && intent) {
+    if (intent.domain === "generic" && !intent.targets.length) {
+      return "On it — working through your request, one step at a time. Interrupt any time; whatever stays valid is kept.";
+    }
+    const bits = constraintBits(intent.constraints);
+    const noun = intent.domain === "dining" ? "restaurants" : intent.domain === "travel" ? "stays" : "options";
+    const what = bits.length ? bits.join(", ") : "your criteria";
+    return `Understood — searching ${intent.targets.join(" and ") || "the local runtime"} for ${noun} ${what}. Interrupt any time; whatever stays valid is kept.`;
+  }
+  if (requestText) {
+    return `On it — "${excerpt(requestText, 110)}". Working through it now; interrupt any time — whatever stays valid is kept.`;
+  }
+  return "On it — building the execution plan. Interrupt any time.";
+}
+
+/** Final reply for a settled version, composed from what that run actually did. */
+function answerLine(
+  list: Task[],
+  rawById: Map<string, BackendTask>,
+  intent: RuntimeIntent | null,
+  isCurrent: boolean,
+): string {
+  const preserved = list.filter((t) => t.status === "preserved").length;
+  const fenced = list.filter((t) => t.status === "fenced").length;
+  const parts: string[] = [];
+
+  if (isBrowseList(list)) {
+    const results = list
+      .filter((t) => t.operation.startsWith("browse_"))
+      .map((t) => resultOf(rawById.get(t.task_id)));
+    const content = results.filter((r) => r.title || r.text || r.summary);
+    const last = content[content.length - 1] ?? results[results.length - 1] ?? {};
+    const target = browseTarget(list, rawById);
+    const host =
+      target?.host ??
+      (isCurrent ? String(intent?.targets[0] ?? intent?.constraints.url ?? "the page") : "the page");
+    const title = last.title || (last.summary ? last.summary.split(" — ")[0] : "");
+    const shot = results.some((r) => Boolean(r.screenshot));
+    parts.push(title ? `Done — I opened ${host} and the page reads “${excerpt(title, 90)}”.` : `Done — I opened ${host}.`);
+    const body = last.text || "";
+    if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+    if (shot) parts.push("The final capture is pinned beside the plan.");
+    if (!body && !shot && results.some((r) => r.simulated)) {
+      parts.push("This run was simulated locally — no live page was loaded.");
+    }
+    const err = results.map((r) => r.error).find(Boolean);
+    if (err && !body) parts.push(`The browser reported: ${excerpt(String(err), 140)}`);
+  } else {
+    const finished = list.filter((t) => t.status === "completed" || t.status === "preserved");
+    const labels = finished.map((t) => t.label).slice(0, 4);
+    parts.push(
+      `Done — ${finished.length} step${finished.length === 1 ? "" : "s"} finished${labels.length ? `: ${labels.join(" · ")}` : ""}.`,
+    );
+    const completed = list.filter((t) => t.status === "completed");
+    if (completed.length > 0 && completed.every((t) => resultOf(rawById.get(t.task_id)).simulated)) {
+      parts.push("This run was executed by the local simulation — no live results were fetched.");
+    }
+  }
+
+  if (preserved > 0) parts.push(`${preserved} earlier step${preserved === 1 ? "" : "s"} preserved — nothing valid was recomputed.`);
+  if (fenced > 0) parts.push(`${fenced} stale result${fenced === 1 ? "" : "s"} fenced from commit.`);
+  return parts.join(" ");
+}
+
+/** Results block for the settled version, populated from real task data. */
+function buildApiResults(
+  list: Task[],
+  rawById: Map<string, BackendTask>,
+  intent: RuntimeIntent | null,
+  version: number,
+  fenced: number,
+  preserved: number,
+  isCurrent: boolean,
+  requestText: string,
+): { heading: string; note: string | null; items: { title: string; detail: string; badge: string }[]; meta: string } {
+  const seen = new Map<string, number>();
+  const items = list.map((task) => {
+    const count = (seen.get(task.label) ?? 0) + 1;
+    seen.set(task.label, count);
+    const badge = ["completed", "preserved"].includes(task.status)
+      ? "done"
+      : ["fenced", "invalidated", "archived"].includes(task.status)
+        ? task.status
+        : task.status;
+    return {
+      title: count > 1 ? `${task.label} (${count})` : task.label,
+      detail: excerpt(task.output ?? `${task.operation} · ${task.status}`, 110),
+      badge,
+    };
+  });
+
+  if (isBrowseList(list)) {
+    const results = list.map((t) => resultOf(rawById.get(t.task_id)));
+    const content = [...results].reverse().find((r) => r.title || r.text) ?? {};
+    const target = browseTarget(list, rawById);
+    const host = target?.host ?? (isCurrent ? String(intent?.targets[0] ?? intent?.constraints.url ?? "the page") : "the page");
+    const pageUrl = target?.url ?? String(content.url ?? (isCurrent ? intent?.constraints.url ?? "" : ""));
+    const shot = results.some((r) => Boolean(r.screenshot));
+    return {
+      heading: content.title ? `${host} — ${excerpt(content.title, 80)}` : `Opened ${host}`,
+      note: shot
+        ? `Final capture pinned in the preview · ${list.length} steps · state v${version}`
+        : `State v${version} · ${list.length} steps`,
+      items,
+      meta: `${pageUrl || host} · state v${version} applied`,
+    };
+  }
+
+  const completed = list.filter((t) => t.status === "completed");
+  const simulated = completed.length > 0 && completed.every((t) => resultOf(rawById.get(t.task_id)).simulated);
+  const bits = isCurrent ? constraintBits(intent?.constraints ?? {}) : [];
+  const heading = bits.length
+    ? `${bits.join(" · ")} — ${simulated ? "local simulation" : "results"}`
+    : requestText
+      ? `${excerpt(requestText, 72)} — ${simulated ? "local simulation" : "results"}`
+      : `Execution complete — ${list.length} step${list.length === 1 ? "" : "s"}`;
+  const notes: string[] = [];
+  if (simulated) notes.push("no live results were fetched — this ran in the local simulation");
+  if (preserved > 0) notes.push(`${preserved} earlier step${preserved === 1 ? "" : "s"} reused`);
+  if (fenced > 0) notes.push(`${fenced} stale result${fenced === 1 ? "" : "s"} fenced`);
+  const targets = isCurrent ? intent?.targets ?? [] : [];
+  return {
+    heading,
+    note: notes.length ? notes.join(" · ") : null,
+    items,
+    meta: `${targets.join(" · ") || "local runtime"} · state v${version} applied`,
+  };
 }
 
 function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeState {
@@ -388,12 +630,12 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
 
   const events = translateEvents(rawEvents);
 
-  // Synthesize a stable closing line for each fully settled version from real
-  // task state (never fabricated result items). Keep the synthetic event id and
-  // timestamp stable across polls so the UI's append-only stream never rewinds.
-  // The id is scoped by run_id: versions restart at v1 after /api/reset, so a
-  // bare `syn-close-v1` would collide with the previous run's tail and defeat
-  // the stream's reset detection in App (frozen pre-reset items).
+  // Synthesize the agent's replies for each version from real task state
+  // (never fabricated result items). Stable synthetic ids + timestamps across
+  // polls so the UI's append-only stream never rewinds. Ids are scoped by
+  // run_id: versions restart at v1 after /api/reset, so a bare `syn-close-v1`
+  // would collide with the previous run's tail and defeat the stream's reset
+  // detection in App (frozen pre-reset items).
   const runId = raw.run_id ?? "run";
   const running = raw.running_tasks ?? tasks.filter((t) => t.status === "running").length;
   const hasPending = tasks.some((task) => task.status === "pending");
@@ -404,6 +646,24 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
     list.push(t);
     byVersion.set(t.created_in, list);
   }
+
+  // Acknowledgement: emitted as soon as a version's tasks exist (not only
+  // when settled), timestamped at first task creation so it lands right after
+  // the plan in the stream — the agent's first word is an intent-aware opener,
+  // never silence. The opener is derived from THIS version's evidence (its
+  // targeted URL / creating request), so replies synthesized after an
+  // interruption never describe an older run with the newer intent.
+  const requests = requestTextByVersion(rawEvents);
+  for (const [v, list] of byVersion) {
+    if (list.length === 0) continue;
+    const firstAt = Math.min(
+      ...list.map((task) => rawTaskById.get(task.task_id)?.created_at ?? Number.POSITIVE_INFINITY),
+    );
+    if (!Number.isFinite(firstAt)) continue;
+    const text = ackLine(browseTarget(list, rawTaskById), v === version, intent, requests.get(v) ?? "");
+    events.push(mk(`syn-ack-${runId}-v${v}`, "assistant.message", firstAt, v, { text, closing: false }));
+  }
+
   for (const [v, list] of byVersion) {
     if (list.length === 0) continue;
     const settled = list.every((t) => TERMINAL.has(t.status));
@@ -411,6 +671,7 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
     if (v === version && running > 0) continue;
     const steps = list.filter((t) => t.status === "completed" || t.status === "preserved").length;
     const preserved = list.filter((t) => t.status === "preserved").length;
+    const fenced = list.filter((t) => t.status === "fenced").length;
     const closedAt = Math.max(
       0,
       ...list.map((task) => {
@@ -425,7 +686,18 @@ function normalizeState(raw: BackendState, rawEvents: BackendEvent[]): RuntimeSt
       }),
     );
     events.push(
-      mk(`syn-close-${runId}-v${v}`, "assistant.message", closedAt + 0.001, v, { text: closingLine(steps, preserved), closing: true }),
+      mk(`syn-close-${runId}-v${v}`, "assistant.message", closedAt + 0.001, v, {
+        text: answerLine(list, rawTaskById, intent, v === version),
+        closing: true,
+      }),
+    );
+    events.push(
+      mk(`syn-results-${runId}-v${v}`, "run.completed", closedAt + 0.002, v, {
+        steps,
+        preserved,
+        fenced,
+        results: buildApiResults(list, rawTaskById, intent, v, fenced, preserved, v === version, requests.get(v) ?? ""),
+      }),
     );
   }
   events.sort((a, b) => a.timestamp - b.timestamp);

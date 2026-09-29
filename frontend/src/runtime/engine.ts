@@ -631,8 +631,8 @@ class InterruptEngine {
   }
 
   private closingLine(steps: number, preserved: number): string {
-    const base = `Done — ${steps} execution step${steps === 1 ? "" : "s"} total`;
-    return preserved > 0 ? `${base}, ${preserved} preserved from the earlier state. Nothing valid was recomputed.` : `${base}.`;
+    const base = `${steps} step${steps === 1 ? "" : "s"} finished`;
+    return preserved > 0 ? `Done — ${base}, ${preserved} preserved from the earlier state. Nothing valid was recomputed.` : `Done — ${base}.`;
   }
 
   private score(): number {

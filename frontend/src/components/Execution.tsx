@@ -152,15 +152,16 @@ export function ExecutionSection({
   const isLive = version === currentVersion && (phase === "running" || phase === "planning" || phase === "interrupting");
   const paused = isLive && phase === "interrupting";
   const activeTasks = tasks.filter((task) => task.status === "running").map((task) => task.label);
-  // Live preview follows whatever is actually running: a search task keeps
-  // the site window, any other task gets the honest activity card. This is
-  // why non-search requests (e.g. a generic "go to …") still show a preview.
-  const previewTask = isLive
-    ? tasks.find((task) => isBrowserSearchTask(task) && task.status === "running")
-      ?? tasks.find((task) => task.status === "running")
-      ?? tasks.find((task) => isBrowserSearchTask(task) && task.status === "pending")
-      ?? tasks.find((task) => task.status === "pending")
-    : undefined;
+  // Preview priority: (1) a live search task keeps its inline site window;
+  // (2) the newest real browser capture — shown while the rest of the run
+  // continues AND pinned after the run settles, so the user always sees what
+  // the agent actually opened; (3) otherwise any running/pending task falls
+  // back to the honest activity card while live.
+  const runningTask = tasks.find((task) => task.status === "running") ?? tasks.find((task) => task.status === "pending");
+  const siteWindowTask = isLive && runningTask && isBrowserSearchTask(runningTask) ? runningTask : undefined;
+  const pinnedCapture = version === currentVersion ? [...tasks].reverse().find((task) => task.screenshot) : undefined;
+  const previewTask = siteWindowTask ?? pinnedCapture ?? (isLive ? runningTask : undefined);
+  const previewSettled = !siteWindowTask && Boolean(pinnedCapture) && previewTask === pinnedCapture && !isLive;
 
   if (tasks.length === 0) return null;
 
@@ -220,7 +221,9 @@ export function ExecutionSection({
             {tasks.map((task, index) => <ExecutionTask key={task.task_id} task={task} index={index} isLast={index === tasks.length - 1} />)}
           </ul>
         </div>
-        {previewTask ? <LiveTaskPreview task={previewTask} requestText={requestText} siteWindow={isBrowserSearchTask(previewTask)} /> : null}
+        {previewTask ? (
+          <LiveTaskPreview task={previewTask} requestText={requestText} siteWindow={Boolean(siteWindowTask)} settled={previewSettled} />
+        ) : null}
       </div>
     </section>
   );
