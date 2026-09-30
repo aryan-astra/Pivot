@@ -21,10 +21,10 @@ This document is for another AI coding/deployment agent operating on the user's 
 git clone <repo-url>
 cd Pivot
 
-# Backend (backend has requirements.txt; venv lives in .venv)
+# Backend (dependencies are declared in requirement.txt at the repo root; venv lives in .venv)
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r backend\requirements.txt
+pip install -r requirement.txt
 
 # Frontend (new terminal)
 cd frontend
@@ -40,7 +40,7 @@ cd Pivot
 # Backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r requirement.txt
 
 # Frontend (new terminal)
 cd ../frontend
@@ -187,7 +187,7 @@ git push -u origin main
 
 1. Connect GitHub repo
 2. Root directory: `.`
-3. Build command: `pip install -r backend/requirements.txt`
+3. Build command: `pip install -r requirement.txt`
 4. Start command: `cd backend && python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT`
 5. Set environment variables from `.env.example`
 

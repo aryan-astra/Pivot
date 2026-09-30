@@ -1,21 +1,30 @@
 # INTEGRATION_GUIDE.md — For Local AI Agent
 
-> **PIVOT errata (verified against implementation, Sep 2026):**
-> - Event names below are `UPPER_SNAKE`, but `backend/runtime/runtime.py` actually
->   emits `USER_INPUT`, `INTERRUPTION_DETECTED`, `STATE_VERSION_CHANGED`, etc.
->   (see §3 list) — while the PIVOT frontend translates them to its dotted
->   stream dialect in `frontend/src/runtime/api.ts`. Trust the code.
-> - Paths below say `interruptible-agent/`; in this repo the root contains
->   `backend/`, `frontend/`, `tests/`, `docs/` as siblings.
-> - `vite.config.ts` in PIVOT already contains the proxy + `allowedHosts` config
->   required in §4.1, and `frontend/src/runtime/api.ts` honors `VITE_API_URL`.
-> - `POST /api/reset` starts a truly fresh session (DB files are dropped);
->   `StateManager` also resumes the version counter from an existing DB so
->   restarts never hit `UNIQUE constraint failed: state_versions.version`.
-
-This document is for an AI agent operating on the user's local Windows 11 machine.
-It explains the full project, how to integrate the frontend with the backend,
-what to install, and how to run everything.
+> **PIVOT errata (verified against the implementation, Sep 2026).**
+>
+> This guide was written for an earlier layout and ported here. Where it
+> disagrees with the code, the code wins. The known differences:
+>
+> - **Paths.** Sections below refer to `interruptible-agent/`. In this repository
+>   the root contains `backend/`, `frontend/`, `tests/`, `docs/` as siblings.
+>   Python dependencies are declared in `requirement.txt` at the root.
+> - **Event names.** The backend emits `UPPER_SNAKE` events — `USER_INPUT`,
+>   `INTERRUPTION_DETECTED`, `STATE_VERSION_CHANGED`, `TASK_CREATED`,
+>   `TASK_FENCED`, `STALE_RESULT_REJECTED` and so on. The names in §3 are
+>   correct. The frontend separately translates them into a dotted stream
+>   dialect in `frontend/src/runtime/api.ts`; that dialect is frontend-internal
+>   and is not what the backend puts on the wire.
+> - **Dev proxy.** `vite.config.ts` already contains the proxy and
+>   `allowedHosts` configuration that §4.1 asks you to add, and
+>   `frontend/src/runtime/api.ts` honours `VITE_API_URL`.
+> - **Reset semantics.** `POST /api/reset` starts a genuinely fresh session
+>   (database files are dropped). `StateManager` also resumes the version
+>   counter from an existing database, so restarts do not hit
+>   `UNIQUE constraint failed: state_versions.version`.
+>
+> For the current architecture, read `docs/PEEK_INSIDE.md` instead. This
+> document is kept for the integration detail and the original setup
+> walkthrough.
 
 ---
 
@@ -334,7 +343,7 @@ python -m venv .venv
 python --version
 
 # Install Python dependencies LOCALLY (inside .venv)
-pip install -r backend\requirements.txt
+pip install -r requirement.txt
 
 # Install test dependencies
 pip install pytest pytest-asyncio
@@ -666,7 +675,7 @@ These files are already complete and should NOT be modified:
 | `backend/providers/__init__.py` | Provider interfaces |
 | `backend/providers/deterministic.py` | Deterministic providers |
 | `backend/browser/executor.py` | Playwright browser automation |
-| `backend/requirements.txt` | Python dependencies |
+| `requirement.txt` | Python dependencies |
 | `tests/unit/test_runtime.py` | 63 unit/integration tests |
 | `docs/*` | All documentation |
 | `Dockerfile` | Docker configuration |

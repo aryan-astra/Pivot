@@ -1,0 +1,35 @@
+# PIVOT — Python dependencies
+#
+# Runtime dependencies for the backend. Everything here is imported by code in
+# `backend/`; nothing is listed for convenience. Install with:
+#
+#     pip install -r requirement.txt
+#
+# Then fetch the browser binary once, which the pip package does not download:
+#
+#     playwright install chromium
+#
+# The backend starts and the full test suite passes without Chromium — the
+# browser executor then reports tasks as simulated rather than failing them.
+
+# --- API layer -------------------------------------------------------------
+fastapi==0.115.6            # HTTP + WebSocket API (backend/api/main.py)
+uvicorn[standard]==0.32.1   # ASGI server; [standard] supplies the WebSocket
+                            # implementation the /ws route needs
+pydantic==2.10.3            # request/response models for the API
+
+# --- Configuration ---------------------------------------------------------
+python-dotenv==1.0.1        # loads .env in backend/api/main.py
+
+# --- Browser execution -----------------------------------------------------
+# Imported lazily inside BrowserSession.ensure_started(). If Playwright or its
+# Chromium build is unavailable the runtime falls back to a simulated handler
+# instead of failing, so this is the one dependency the project degrades
+# without rather than refuses to start.
+playwright==1.63.0
+
+# --- Test suite ------------------------------------------------------------
+# Needed to run `python -m pytest tests/`. Kept here so a single file sets up
+# both the server and its tests; not imported by application code.
+pytest==8.3.4
+pytest-asyncio==0.24.0

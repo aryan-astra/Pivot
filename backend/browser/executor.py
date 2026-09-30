@@ -50,7 +50,9 @@ def content_text(body: str, limit: int = 2000) -> str:
     """Page text trimmed of leading boilerplate so answers quote content.
 
     Screenshots stay raw pixels; this only affects the text summary that the
-    UI reads back ("What I see: …"), which otherwise opens with skip links.
+    UI reads back, which otherwise opens with skip links and nav bars. It is
+    the fallback path — `focused_text` is used whenever the request carries a
+    query, and is what actually decides what the answer quotes.
     """
     lines = [ln.strip() for ln in body.splitlines()]
     i = 0

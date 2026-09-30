@@ -131,5 +131,7 @@ browser-permission/service failures; the composer discloses that the browser
 speech service processes dictation. The site window appears in the floating
 preview window that follows an active search task—there is no global
 browser-preview control or blocking modal.
-It is explicitly labelled as a local simulation and makes no outbound browsing
-requests; live site content requires a connected browser adapter.
+Browse steps drive a real local Chromium through `backend/browser/executor.py`,
+so the preview shows real page content rather than a mockup. When Playwright or
+its Chromium build is absent, the same steps complete as simulated and the card
+is labelled `simulated` on screen instead of implying a live page.

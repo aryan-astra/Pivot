@@ -104,7 +104,7 @@ Or connect GitHub repo in Vercel dashboard:
 
 1. Connect GitHub repo
 2. Root directory: `.`
-3. Build command: `pip install -r backend/requirements.txt`
+3. Build command: `pip install -r requirement.txt`
 4. Start command: `cd backend && python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT`
 5. Environment variables: Copy from `.env.example`
 6. Plan: Free

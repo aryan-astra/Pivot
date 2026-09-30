@@ -16,6 +16,21 @@ from typing import Any, Optional
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
+_REPO_ROOT = _BACKEND_DIR.parent
+
+# Load .env from the repo root (or backend/) before any os.getenv below, so the
+# documented "copy .env.example to .env" workflow actually applies to a
+# locally-run backend and not only to docker-compose. Real environment
+# variables win over file values.
+try:
+    from dotenv import load_dotenv
+
+    for _candidate in (_REPO_ROOT / ".env", _BACKEND_DIR / ".env"):
+        if _candidate.is_file():
+            load_dotenv(_candidate, override=False)
+            break
+except ImportError:  # pragma: no cover - dotenv is a declared dependency
+    pass
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware

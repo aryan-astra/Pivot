@@ -5,11 +5,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt ./requirements.txt
+COPY requirement.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright browsers (optional; runtime works in simulated mode without them)
-RUN pip install playwright==1.49.1 && playwright install chromium --with-deps || true
+# Playwright browsers (optional; runtime works in simulated mode without them).
+# Version kept in step with requirement.txt.
+RUN pip install playwright==1.63.0 && playwright install chromium --with-deps || true
 
 # Backend + built frontend (build frontend first: npm --prefix frontend install && npm --prefix frontend run build)
 COPY backend/ ./backend/

@@ -339,3 +339,125 @@ Browser E2E (vite `:5173` + backend `:8000`, MCP Chromium, screenshots):
 - Dev Mode Inspector: readiness 16% mid-run / 6% idle; constraints show
   pinned URL + query + `bing.com` target; zero console errors in every
   run above.
+
+## Plan pacing (2026-09-29)
+
+`_create_plan` staggers the simulated step durations for shopping/search plans
+instead of leaving all six steps on the `_default_task_handler` 8 s default:
+
+| Step | Before | After | Why |
+|---|---|---|---|
+| Search (per target) | 8 s | 6.0 s | completes while parses are still parsing |
+| Parse (per target) | 8 s | 7.5 s | completes before merge starts |
+| Merge | 8 s | 18.0 s | still running when the interrupt lands |
+| Compare | 8 s | 22.0 s | still running when the interrupt lands |
+
+This is **pacing only** - scheduling, impact analysis, fencing and state logic
+are untouched. It exists because uniform 8 s durations make every step of a
+chain finish inside the same instantaneous cascade, leaving no window in which
+an interruption can report a *mixed* impact (completed work preserved **and**
+completed work invalidated **and** in-flight work fenced) through the real UI.
+The staggered plan opens that window without staging anything. Travel, hotel,
+flight and the default branch are unchanged.
+
+## Browse request routing and answer extraction (2026-09-30)
+
+Three defects made a named-site request misbehave against live Chromium:
+
+1. The URL branch ran before the search branch, so `go to wikipedia.com and
+   search for X` returned as navigation and quoted the homepage's own text.
+2. There was no site-scoped search, so `search for X on Wikipedia` searched Bing
+   for the literal string `"X on Wikipedia"` - pages about searching Wikipedia
+   rather than about the subject.
+3. The extract step returned the first 2000 characters of `inner_text`, which
+   is navigation; a Wikipedia run quoted the article's own table of contents.
+
+Fixed by a site registry (Wikipedia, Amazon, Flipkart, YouTube, Reddit, IMDb,
+GitHub, LinkedIn, Google) that maps a named site to its own search endpoint, a
+search verb that outranks a bare URL for sites we can actually search, and
+`focused_text()` which keeps prose lines, drops interface chrome, and ranks the
+remainder by query coverage.
+
+Also added: subject-swap interruptions (`change Elon Musk to Sam Altman`
+re-issues the same site's search), question-form routing (`what is the price of
+X`), and word-start anchoring for domain keywords - `iphone` was matching the
+shopping keyword `phone`.
+
+Verification:
+
+- `python -m pytest tests/ -q` -> **112 passed** (97 -> 112: 15 new tests
+  covering each routing rule, the guardrails that keep shopping and travel on
+  their comparison plans, and the extraction).
+- Live Chromium, three-step sequence. `Search for Elon Musk on Wikipedia` opened
+  `https://en.wikipedia.org/wiki/Elon_Musk` (title `Elon Musk - Wikipedia`) and
+  extracted the article lead. Repeating the request re-ran cleanly. Interrupting
+  a third run with `Wait, change Elon Musk to Sam Altman` moved state v1 -> v2 ->
+  v3 -> v4 with the Elon Musk tasks **fenced** and the Sam Altman tasks
+  committed, extracting `Samuel Harris Altman (born April 22, 1985) is an
+  American entrepreneur and investor who has been the chief executive officer
+  (CEO) of the artificial intelligence company OpenAI since 2019.`
+- `search for samsung galaxy s26 price` returned real Samsung result rows rather
+  than a header dump.
+
+## Dependency declaration and submission check (2026-09-30)
+
+`requirement.txt` at the repo root replaces `backend/requirements.txt`. The
+declared set, each traceable to an import in `backend/`:
+
+| Package | Pin | Why |
+|---|---|---|
+| `fastapi` | 0.115.6 | HTTP + WebSocket API |
+| `uvicorn[standard]` | 0.32.1 | ASGI server; `[standard]` supplies the `/ws` implementation |
+| `pydantic` | 2.10.3 | request/response models |
+| `python-dotenv` | 1.0.1 | loads `.env` in `backend/api/main.py` |
+| `playwright` | 1.63.0 | real local Chromium for the browse operations |
+| `pytest` | 8.3.4 | test runner |
+| `pytest-asyncio` | 0.24.0 | async test support |
+
+Dropped as declared-but-unused: `httpx` (no `TestClient` or client use anywhere)
+and `websockets` (arrives transitively via `uvicorn[standard]`; the `/ws` route
+uses `fastapi.WebSocket`). No live remote provider is wired up, so no HTTP client
+is required - the provider variables in `.env.example` are commented out and
+unread.
+
+Verified in a **clean virtual environment created outside the repository**:
+
+- `pip install -r requirement.txt` -> all 7 distributions installed at the
+  pinned versions
+- every `backend/` module imports (`api.main`, `runtime.*`, `browser.executor`,
+  `providers.*`) - this is what proves no undeclared import is hiding
+- the app object builds with **16 routes**, including `/api/health` and `/ws`
+- `python -m pytest tests/ -q` -> **112 passed** inside the clean environment
+
+Reproduce with `python scripts/verify_requirements.py` (creates the venv under
+`%TEMP%`, runs the checks, then deletes it).
+
+Frontend, re-verified at the same time:
+
+- `npm run typecheck` -> clean
+- `npm run build` -> `dist/index.html` 1,208.81 kB (gzip 619.64 kB), single file
+- README link and path audit via `python scripts/check_readme_links.py` ->
+  42 references checked, all resolve
+
+### Demo scenario impact, measured
+
+The README's headline demo was checked against the live stack rather than assumed.
+Submitting `Find laptops under ₹60,000 with 8 GB RAM on Amazon and Flipkart`,
+waiting for the mixed-impact window (both parses completed, merge and compare
+still running), then interrupting:
+
+| Interrupt text | `changed_fields` | v | preserved | invalidated | fenced |
+|---|---|---|---|---|---|
+| `Wait, budget is ₹80,000 now` | `max_price` | 1 -> 2 | **2** | **2** | **2** |
+| `Wait, make that 16 GB RAM` | `ram` | 1 -> 2 | **0** | **4** | **2** |
+| `Wait, 16 GB RAM and budget ₹80,000` | `ram`, `max_price` | 1 -> 2 | **0** | **4** | **2** |
+
+The price change is the one the README uses, because it is the only one of the
+three that produces a split. The RAM change preserves nothing, and correctly so:
+every step in this plan declares `ram` in its reads, so all four completed steps
+are affected. Both numbers come from `POST /api/interrupt` responses on the live
+stack, not from the plan on paper.
+
+The first draft of the README claimed 2/2/2 for a RAM change. It was wrong, and
+`check_demo_claim` caught it before the commit. The table and the
+`Seeing it work` steps now quote the measured values.

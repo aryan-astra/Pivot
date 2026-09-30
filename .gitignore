@@ -1,18 +1,6 @@
-# PIVOT root ignores (backend/frontend specifics live in their dirs)
+# Python
 .venv/
 venv/
-node_modules/
-frontend/dist/
-frontend/.vite/
-.env
-.env.local
-.env.production
-!.env.example
-data/
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -20,25 +8,57 @@ __pycache__/
 .mypy_cache/
 htmlcov/
 .coverage
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Secrets — .env.example is the only env file that belongs in the repo
+.env
+.env.local
+.env.production
+!.env.example
+
+# Runtime state (SQLite databases, WAL sidecars)
+backend/data/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs, OS cruft
 *.log
 logs/
 .DS_Store
 Thumbs.db
 
-# Local-only files — never committed
+# Local-only agent notes and scratch documents — never committed
 AGENTS.md
 docs/ORIGINAL_README.md
+docs/LIVE_BROWSER_BUILD_PLAN.md
+skills-lock.json
+.agents/
+.playwright-mcp/
+
+# Superseded prototype workspaces, kept on disk only as a local reference.
+# The application in this repository is backend/ + frontend/ at the root.
 Frontend-option1/
 Frontend-option2/
 workspace-*/
 
-# Local-only tooling and artifacts — never committed.
-.agents/
-skills-lock.json
-.playwright-mcp/
+# Ad-hoc screenshots taken while debugging the UI
 pivot-*.png
 
-# Video production workspace — entirely local until the final cut is approved.
-# Nothing under video/ (source, configs, docs, node_modules, render output)
-# enters the repo yet; drop this line when the video is ready to land.
+# Video workspace.
+#
+# The Remotion project under video/ is a local production workspace, not part of
+# the submitted application: it depends on capture artefacts that are not
+# committed, and the film it builds is not referenced by the README. Keeping the
+# whole directory out avoids shipping a half-configured second npm project and a
+# Remotion render cache to anyone cloning the repo. If it is ever finished and
+# referenced, replace this block with targeted ignores for its build output
+# (node_modules/, out/, .remotion/, capture/frames/) rather than a blanket one.
 video/
