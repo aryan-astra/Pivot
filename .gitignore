@@ -49,8 +49,16 @@ Frontend-option1/
 Frontend-option2/
 workspace-*/
 
-# Ad-hoc screenshots taken while debugging the UI
+# Captures: screenshots, video frames and traces written out while debugging or
+# building presentation material. The repository is source only — none of this
+# belongs in a submission, and the underscore variants are deliberately matched
+# too so `git add -A` cannot pick them up.
+screenshots/
+frames/
+traces/
+PIVOT_PRESENTATION_ASSETS/
 pivot-*.png
+pivot_*.png
 
 # Video workspace.
 #

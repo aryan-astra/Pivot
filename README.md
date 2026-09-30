@@ -106,7 +106,10 @@ declares what it reads, the classification falls out exactly:
 | Compare & Rank | ram, max_price, category | **fenced** — was running |
 
 That is a real run, not a staged one: 2 preserved, 2 invalidated, 2 fenced, state
-`v1 → v2`. The two running steps are fenced rather than invalidated because they
+`v1 → v2`. Both figures below were measured against a running backend rather than
+reasoned about, and are recorded in
+[docs/TEST_EVIDENCE.md](docs/TEST_EVIDENCE.md). The two running steps are fenced
+rather than invalidated because they
 were mid-flight — they are stopped *and* barred from committing. The four
 completed steps split two-and-two on the same criterion, which is the whole
 argument in one screen.
@@ -146,6 +149,15 @@ the runtime does emits an event: `TASK_CREATED`, `TASK_STARTED`, `TASK_COMPLETED
 `INTERRUPTION_DETECTED`, `RECOVERY_STARTED`, `RECOVERY_COMPLETED`,
 `STALE_RESULT_REJECTED`. Events are how the UI follows a run, and how the tests
 assert on one without reaching into internals.
+
+**The runtime** (`runtime/runtime.py`) is the piece that actually owns the run.
+It takes the parsed intent, asks the graph for an execution order, and then
+drives that order: start a step, wait for it, record what it returned, and decide
+what to do when you change your mind while it works. Everything else in this
+section is a service it calls — the bus to announce what happened, state to
+remember which version it is on, cancellation to stop work it no longer wants.
+Events, versions and fencing are all separate ideas, but this is the one file
+where they meet, so if you read only one, read this one.
 
 **The task graph** (`runtime/graph.py`) is a DAG. Each node is a step, and each
 edge means "this step needs that one's output first". The graph is what makes
@@ -270,7 +282,7 @@ preserved, what was refused, and which version it belongs to.
 Windows / PowerShell first, since that is what we developed on. The commands work
 on bash with `cd` and `&&` in place of `;` and `Copy-Item`.
 
-Prerequisites: **Python 3.10 or newer** (3.13 works; CI and the Docker image use
+Prerequisites: **Python 3.10 or newer** (3.13 works; the Docker image pins
 3.12) and **Node.js 18 or newer** (developed on 24).
 
 ```powershell
@@ -320,8 +332,10 @@ we do not have.
 
 ## Environment variables
 
-Everything is optional. With no `.env` and no keys, PIVOT starts, runs its whole
-test suite, and executes tasks with its deterministic providers.
+### Required
+
+**None.** With no `.env` and no keys, PIVOT starts, runs its whole test suite,
+and executes tasks with its deterministic providers.
 
 ```powershell
 Copy-Item .env.example .env
@@ -330,7 +344,9 @@ Copy-Item .env.example .env
 The backend loads `.env` at startup; Vite loads it for the frontend. Real
 environment variables take precedence over file values.
 
-**Used by the backend today**
+### Optional — read by this build
+
+**Backend**
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -341,7 +357,7 @@ environment variables take precedence over file values.
 | `BROWSER_HEADLESS` | `true` | Set `false` to watch Chromium drive the page; needs a display. |
 | `BROWSER_MAX_CONCURRENT` | `3` | Concurrent browser contexts. |
 
-**Used by the frontend**
+**Frontend**
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -349,7 +365,7 @@ environment variables take precedence over file values.
 | `BACKEND_URL` | `http://localhost:8000` | Where the Vite dev proxy forwards `/api` and `/ws`. |
 | `FRONTEND_PORT` | `5173` | Dev server port. |
 
-**Reserved for provider adapters**
+### Local mode — listed, not read
 
 `LLM_API_KEY`, `JEV_API_KEY`, `STT_API_KEY`, `FALLBACK_LLM_*` and their
 `*_BASE_URL` / `*_MODEL` companions are listed in `.env.example` but commented
@@ -372,16 +388,14 @@ With both servers running:
 2. Submit: `Find laptops under ₹60,000 with 8 GB RAM on Amazon and Flipkart`
 3. Let a few steps complete. Six tasks are planned; the cheap ones finish first.
 4. Before the last two finish, submit: `Wait, the budget is ₹80,000 now`
-5. Watch for, in order:
-   - the interruption annotation, and the semantic diff naming `max_price`
-   - the completed search steps turning **stale**
-   - the completed parse steps turning **preserved** — they do not move
-   - the two in-flight steps turning **fenced**
-   - the state version stepping `v1 → v2`
-   - the impact panel: 2 preserved, 2 invalidated, 2 fenced
-   - the recovery frontier being replanned, with the preserved work still wired in
-   - the final result under the new constraint
-6. The event timeline in Dev Mode records all of it.
+5. Watch the interruption land: the annotation appears, the semantic diff names
+   `max_price`, and the two completed search steps turn **stale**.
+6. Watch the split: the two parse steps turn **preserved** and stay where they
+   are, the two in-flight steps turn **fenced**, the state version steps
+   `v1 → v2`, and the impact panel reads 2 preserved, 2 invalidated, 2 fenced.
+7. Watch recovery replan around the preserved work and the result arrive under
+   the new constraint, then scroll the Dev Mode event timeline — every step
+   above is recorded there.
 
 Timing matters on step 4. The plan staggers its simulated durations so the cheap
 steps finish first and the last two are still running when you interrupt. Send the

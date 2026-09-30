@@ -72,9 +72,10 @@ Built for the Samsung PRISM GenAI Hackathon 2026 — Theme 05.
 ```
 interruptible-agent/
 │
+├── requirement.txt             ← Python dependencies (repo root)
+│
 ├── backend/                    ← Python backend (EXISTS)
 │   ├── __init__.py
-│   ├── requirements.txt        ← Python dependencies
 │   ├── api/
 │   │   └── main.py             ← FastAPI app (all endpoints)
 │   ├── runtime/
@@ -343,10 +344,9 @@ python -m venv .venv
 python --version
 
 # Install Python dependencies LOCALLY (inside .venv)
+# The pinned test runners (pytest, pytest-asyncio) come from this same file —
+# there is deliberately no separate unpinned `pip install pytest` step.
 pip install -r requirement.txt
-
-# Install test dependencies
-pip install pytest pytest-asyncio
 ```
 
 The `.venv` folder contains all Python packages locally.

@@ -8,9 +8,12 @@
 
 | Suite | Tests | Passed | Failed | Duration |
 |-------|-------|--------|--------|----------|
-| Unit Tests | 63 | 63 | 0 | 1.54s |
-| Integration | (covered by unit) | — | — | — |
-| E2E (API) | 3 | 3 | 0 | < 1s |
+| Unit (`tests/unit/`) | 112 | 112 | 0 | 11.07s |
+| Integration, E2E, faults | 0 — placeholder packages only | — | — | — |
+
+`tests/integration/`, `tests/e2e/` and `tests/faults/` contain an `__init__.py`
+each and no tests. They are listed here rather than quietly omitted, so the table
+above is the whole picture.
 
 ## Unit Test Coverage
 
