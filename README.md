@@ -4,7 +4,7 @@
 >
 > **https://drive.google.com/file/d/1DcgS1CpTjkDxaqSFtwKn6UR92573X751/view?usp=sharing**
 >
-> 📎 Submission deck: [`SRM_Institute_of_Science_and_Technology_Samseon_Sukas_Submission.pptx`](./SRM_Institute_of_Science_and_Technology_Samseon_Sukas_Submission.pptx)
+> 📎 Submission deck: [`SRMInstituteofScienceandTechnology_InnovAI_5.pptx`](./SRMInstituteofScienceandTechnology_InnovAI_5.pptx) · 📋 AI disclosure: [`SRMInstituteofScienceandTechnology_InnovAI_5.docx`](./SRMInstituteofScienceandTechnology_InnovAI_5.docx)
 
 ---
 
