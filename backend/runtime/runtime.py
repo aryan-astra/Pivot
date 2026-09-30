@@ -361,7 +361,14 @@ class Runtime:
         plan = []
 
         if intent.domain in ("shopping", "search", "research"):
-            # Create search tasks for each target
+            # Simulated step durations are staggered (search 6s < parse 7.5s
+            # < merge 18s < compare 22s) rather than the uniform 8s default:
+            # identical durations complete in one ~instant cascade, which
+            # erases the only window where a mid-run interruption can report
+            # a true mixed impact (completed work preserved AND completed work
+            # invalidated AND in-flight work fenced) through the real UI.
+            # The handler reads metadata.duration — this is pacing only; the
+            # runtime behavior (scheduling, impact, fencing) is unchanged.
             for i, target in enumerate(intent.targets):
                 search_id = gen_id("task_")
                 plan.append({
@@ -372,6 +379,7 @@ class Runtime:
                     "semantic_scope": [target.lower()],
                     "execution_class": ExecutionClass.INTERRUPTIBLE.value,
                     "dependencies": [],
+                    "metadata": {"duration": 6.0},
                 })
 
                 parse_id = gen_id("task_")
@@ -383,6 +391,7 @@ class Runtime:
                     "semantic_scope": [target.lower()],
                     "execution_class": ExecutionClass.INTERRUPTIBLE.value,
                     "dependencies": [search_id],
+                    "metadata": {"duration": 7.5},
                 })
 
             # Merge results
@@ -396,6 +405,7 @@ class Runtime:
                     "reads": list(intent.constraints.keys()),
                     "execution_class": ExecutionClass.CRITICAL.value,
                     "dependencies": parse_ids,
+                    "metadata": {"duration": 18.0},
                 })
 
                 compare_id = gen_id("task_")
@@ -406,6 +416,7 @@ class Runtime:
                     "reads": list(intent.constraints.keys()),
                     "execution_class": ExecutionClass.COMMIT.value,
                     "dependencies": [merge_id],
+                    "metadata": {"duration": 22.0},
                 })
 
         elif intent.domain in ("travel", "hotel", "flight"):
@@ -427,12 +438,21 @@ class Runtime:
             # independently cancellable and re-runnable.
             url = str(intent.constraints.get("url", ""))
             query = str(intent.constraints.get("query", ""))
+            site = str(intent.constraints.get("site", ""))
             host = (intent.targets or ["web"])[0]
-            nav_label = f"Search the web for {query}" if query else f"Open {host}"
+            # The label names what was actually asked and of which site, so a
+            # Wikipedia run reads "Search Wikipedia for Elon Musk" rather than
+            # the generic "Search the web for …".
+            if query:
+                nav_label = f"Search {site} for {query}" if site else f"Search the web for {query}"
+            else:
+                nav_label = f"Open {host}"
             nav_id = gen_id("task_")
             snap_id = gen_id("task_")
             ext_id = gen_id("task_")
-            browse_meta = {"url": url}
+            # `query` rides along so the extract step can return the page
+            # content that answers it instead of the page's leading boilerplate.
+            browse_meta = {"url": url, "query": query}
             plan.append({
                 "task_id": nav_id,
                 "operation": "browse_navigate",

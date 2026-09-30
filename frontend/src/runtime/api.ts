@@ -462,6 +462,36 @@ function requestTextByVersion(rawEvents: BackendEvent[]): Map<number, string> {
   return out;
 }
 
+/**
+ * Display names for the sites the backend parser can search directly. Read
+ * from the version's own target URL (never the current intent, which an
+ * interruption may already have re-pointed), so the answer names the site that
+ * was actually searched.
+ */
+const SITE_NAMES: Record<string, string> = {
+  "en.wikipedia.org": "Wikipedia",
+  "wikipedia.org": "Wikipedia",
+  "www.amazon.in": "Amazon",
+  "amazon.in": "Amazon",
+  "www.flipkart.com": "Flipkart",
+  "flipkart.com": "Flipkart",
+  "www.youtube.com": "YouTube",
+  "youtube.com": "YouTube",
+  "www.reddit.com": "Reddit",
+  "reddit.com": "Reddit",
+  "www.imdb.com": "IMDb",
+  "imdb.com": "IMDb",
+  "github.com": "GitHub",
+  "www.linkedin.com": "LinkedIn",
+  "www.bing.com": "the web",
+  "www.google.com": "Google",
+};
+
+function siteLabel(target: { host: string; url: string } | null): string | null {
+  if (!target) return null;
+  return SITE_NAMES[hostFromUrl(target.url)] ?? SITE_NAMES[target.host] ?? null;
+}
+
 function constraintBits(c: Record<string, string | number>): string[] {
   const bits: string[] = [];
   if (c.category) bits.push(String(c.category).toLowerCase());
@@ -565,12 +595,14 @@ function answerLine(
         `Stopped — ${cancelled} step${cancelled === 1 ? "" : "s"} cancelled on your request; nothing was captured.`,
       );
     } else if (query) {
-      parts.push(`Done — I searched the web for “${excerpt(query, 90)}”.`);
-      if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+      const where = siteLabel(target) ?? "the web";
+      parts.push(`Done — I searched ${where} for “${excerpt(query, 90)}”.`);
+      if (body) parts.push(`The page says: ${excerpt(body, 380)}`);
       else if (title) parts.push(`The results page reads “${excerpt(title, 90)}”.`);
     } else {
-      parts.push(title ? `Done — I opened ${host} and the page reads “${excerpt(title, 90)}”.` : `Done — I opened ${host}.`);
-      if (body) parts.push(`What I see: ${excerpt(body, 340)}`);
+      parts.push(`Done — I opened ${host}.`);
+      if (body) parts.push(`The page says: ${excerpt(body, 380)}`);
+      else if (title) parts.push(`The page reads “${excerpt(title, 90)}”.`);
     }
     if (shot) parts.push("The final capture stays visible in the floating preview.");
     if (!body && !shot && results.some((r) => r.simulated)) {

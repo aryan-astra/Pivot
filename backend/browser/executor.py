@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -63,6 +64,77 @@ def content_text(body: str, limit: int = 2000) -> str:
             break
         i += 1
     return " ".join(ln for ln in lines[i:] if ln)[:limit]
+
+
+# Words that describe the *request* rather than its subject. They appear in
+# every search-results page, so they carry no signal about which block of a page
+# is the answer.
+_GENERIC_TERMS = frozenset({
+    "the", "for", "search", "find", "look", "price", "prices", "of", "on",
+    "in", "at", "what", "is", "are", "and", "with", "a", "an", "to", "me",
+    "my", "please", "show", "get", "give", "how", "much", "does", "do", "from",
+})
+
+
+def focused_text(body: str, query: str, limit: int = 2000) -> str:
+    """The parts of a page that answer `query`, returned in page order.
+
+    The first N characters of a page are navigation and boilerplate, not an
+    answer — returning them verbatim is what made a Wikipedia run report the
+    site's own table of contents and toolbar instead of anything about the
+    subject.
+
+    `inner_text` emits one line per element, so a *line* is the natural unit of
+    page content. Prose is long and reads as sentences; interface chrome (a
+    table of contents, a tab strip, a language picker) is many short fragments,
+    so keeping only substantial lines drops the chrome without needing a
+    per-site selector list that silently rots. Those lines are then ranked by
+    which query terms they contain, so the answer is the content the request
+    was about rather than the content that happened to be first.
+
+    Falls back to the plain leading text when nothing matches, so a page that
+    never mentions the query still reports something honest.
+    """
+    if not query:
+        return content_text(body, limit)
+
+    terms = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if len(t) > 1]
+    terms = [t for t in terms if t not in _GENERIC_TERMS] or terms
+    if not terms:
+        return content_text(body, limit)
+
+    prose: list[str] = []
+    for raw in body.splitlines():
+        ln = " ".join(raw.split())
+        if len(ln) < 60:
+            continue
+        words = ln.split()
+        # a line that is mostly short SHOUTED tokens is a nav bar, not content
+        shouted = sum(1 for w in words if len(w) > 2 and w.isupper())
+        if shouted > len(words) * 0.4:
+            continue
+        prose.append(ln)
+
+    if not prose:
+        return content_text(body, limit)
+
+    scored: list[tuple[float, int, str]] = []
+    for i, ln in enumerate(prose):
+        low = ln.lower()
+        hits = sum(1 for t in terms if t in low)
+        if not hits:
+            continue
+        # Coverage of the query decides, page order breaks ties: the top result
+        # on a results page, or the lead of an article, comes first.
+        coverage = hits / len(terms)
+        scored.append((coverage * 10.0 - i * 0.02, i, ln))
+
+    if not scored:
+        return content_text(body, limit)
+
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    chosen = sorted(scored[:8], key=lambda s: s[1])
+    return " ".join(ln for _, _, ln in chosen)[:limit]
 
 
 @dataclass
@@ -351,12 +423,20 @@ class BrowserSession:
                 self._browser = None
                 return False
 
-    async def run_task(self, url: str, task_id: str = "", extract_text: bool = False) -> dict[str, Any]:
+    async def run_task(
+        self,
+        url: str,
+        task_id: str = "",
+        extract_text: bool = False,
+        query: str = "",
+    ) -> dict[str, Any]:
         """Navigate + capture title/screenshot inside a fresh task context.
 
         With extract_text, also captures the visible body text (truncated).
-        Returns a result dict. asyncio.CancelledError propagates (never
-        converted) so scheduler cancellation ends the task as CANCELLED.
+        `query` is the request's subject: when supplied, the extracted text is
+        the page content that mentions it rather than the page's leading
+        boilerplate. Returns a result dict. asyncio.CancelledError propagates
+        (never converted) so scheduler cancellation ends the task as CANCELLED.
         The task context is always closed via a shielded cleanup.
         """
         started = await self.ensure_started()
@@ -411,7 +491,7 @@ class BrowserSession:
             if extract_text:
                 try:
                     body = await page.locator("body").inner_text(timeout=ACTION_TIMEOUT_MS)
-                    out["text"] = content_text(body)
+                    out["text"] = focused_text(body, query)
                 except Exception:
                     pass
             return out
@@ -456,6 +536,9 @@ def make_browse_handlers(session: "BrowserSession") -> dict[str, Callable]:
     def _url_of(task: dict[str, Any]) -> str:
         return str((task.get("metadata") or {}).get("url", ""))
 
+    def _query_of(task: dict[str, Any]) -> str:
+        return str((task.get("metadata") or {}).get("query", ""))
+
     async def _run(task: dict[str, Any], cancel_event: "asyncio.Event", extract: bool = False) -> dict[str, Any]:
         if cancel_event.is_set():
             raise asyncio.CancelledError()
@@ -464,7 +547,12 @@ def make_browse_handlers(session: "BrowserSession") -> dict[str, Callable]:
             return {"status": "error", "error": "browse task has no url in metadata"}
         if not is_url_allowed(url):
             return {"status": "error", "error": f"Unsupported URL scheme: {url[:120]}"}
-        out = await session.run_task(url, task_id=task.get("task_id", ""), extract_text=extract)
+        out = await session.run_task(
+            url,
+            task_id=task.get("task_id", ""),
+            extract_text=extract,
+            query=_query_of(task),
+        )
         # One-line human summary: the UI renders result.summary for completed
         # dict results (task outputs stay strings; screenshots ride separately).
         if isinstance(out, dict) and out.get("status") == "completed":
