@@ -1,5 +1,13 @@
 # PIVOT
 
+> ## ▶️ [**DEMO VIDEO — watch the PIVOT walkthrough**](https://drive.google.com/file/d/1DcgS1CpTjkDxaqSFtwKn6UR92573X751/view?usp=sharing)
+>
+> **https://drive.google.com/file/d/1DcgS1CpTjkDxaqSFtwKn6UR92573X751/view?usp=sharing**
+>
+> 📎 Submission deck: [`SRM_Institute_of_Science_and_Technology_Samseon_Sukas_Submission.pptx`](./SRM_Institute_of_Science_and_Technology_Samseon_Sukas_Submission.pptx)
+
+---
+
 **An execution runtime that lets you change your mind mid-task without throwing away work that is still valid.**
 
 Built for the Samsung PRISM GenAI Hackathon 2026 — theme 05, *Interruptible Real-Time Agents*.
